@@ -3,7 +3,7 @@ title: SpringCloud-OpenFeign
 date: 2024-04-22 00:33:16
 tags:
   - SpringCloud
-  -OpenFeign
+  - OpenFeign
 categories: 微服务
 ---
 
