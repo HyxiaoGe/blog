@@ -3,8 +3,8 @@ title: ElasticSearch 复习
 date: 2025-07-23 17:23:00
 categories: 记录
 tags:
-  - Search
   - Elasticsearch
+  - Search
 ---
 ## 什么是ElasticSearch
 
