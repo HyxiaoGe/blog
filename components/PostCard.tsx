@@ -2,11 +2,11 @@ import Link from "next/link";
 import type { PostMeta } from "@/lib/posts";
 
 const gradients = [
-  "card-gradient-1",
-  "card-gradient-2",
-  "card-gradient-3",
-  "card-gradient-4",
-  "card-gradient-5",
+  "linear-gradient(135deg, hsl(245 100% 65%), hsl(280 80% 60%))",
+  "linear-gradient(135deg, hsl(330 85% 60%), hsl(35 100% 55%))",
+  "linear-gradient(135deg, hsl(170 75% 45%), hsl(210 90% 55%))",
+  "linear-gradient(135deg, hsl(35 100% 55%), hsl(15 85% 55%))",
+  "linear-gradient(135deg, hsl(210 90% 55%), hsl(245 100% 65%))",
 ];
 
 function hashString(str: string): number {
@@ -19,7 +19,7 @@ function hashString(str: string): number {
 }
 
 export function PostCard({ post }: { post: PostMeta }) {
-  const gradientClass = gradients[hashString(post.slug) % gradients.length];
+  const gradient = gradients[hashString(post.slug) % gradients.length];
   const date = new Date(post.date).toLocaleDateString("zh-CN", {
     year: "numeric",
     month: "long",
@@ -28,47 +28,46 @@ export function PostCard({ post }: { post: PostMeta }) {
 
   return (
     <Link href={`/posts/${post.slug}`} className="group block">
-      <article
-        className="rounded-xl overflow-hidden transition-all duration-200"
-        style={{ backgroundColor: "var(--color-surface)" }}
-      >
-        <div className={`${gradientClass} h-2`} />
-        <div className="p-6">
-          <div
-            className="flex items-center gap-3 text-sm mb-3"
-            style={{ color: "var(--color-text-tertiary)" }}
-          >
+      <article className="card-hover rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        {/* Gradient banner */}
+        <div
+          className="h-1.5 transition-all duration-300 group-hover:h-2.5"
+          style={{ background: gradient }}
+        />
+
+        <div className="p-5 sm:p-6">
+          {/* Meta row */}
+          <div className="flex items-center gap-2 text-xs mb-3 text-[var(--color-text-tertiary)]">
             <time>{date}</time>
-            <span>&middot;</span>
+            <span className="opacity-40">/</span>
             <span>{post.readingTime}</span>
+            {post.category && (
+              <>
+                <span className="opacity-40">/</span>
+                <span>{post.category}</span>
+              </>
+            )}
           </div>
-          <h2
-            className="text-xl font-semibold mb-2 group-hover:underline decoration-2 underline-offset-4"
-            style={{
-              color: "var(--color-text)",
-              textDecorationColor: "var(--color-accent)",
-            }}
-          >
+
+          {/* Title */}
+          <h2 className="text-lg font-semibold leading-snug mb-2 text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors duration-200">
             {post.title}
           </h2>
+
+          {/* Summary */}
           {post.summary && (
-            <p
-              className="text-sm leading-relaxed line-clamp-2"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
+            <p className="text-sm leading-relaxed line-clamp-2 text-[var(--color-text-secondary)] mb-3">
               {post.summary}
             </p>
           )}
+
+          {/* Tags */}
           {post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-4">
+            <div className="flex flex-wrap gap-1.5 mt-3">
               {post.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="text-xs px-2.5 py-1 rounded-full"
-                  style={{
-                    backgroundColor: "var(--color-bg-secondary)",
-                    color: "var(--color-text-secondary)",
-                  }}
+                  className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]"
                 >
                   {tag}
                 </span>

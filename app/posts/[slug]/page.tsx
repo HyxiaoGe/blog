@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { renderMDX } from "@/lib/mdx";
@@ -43,41 +44,49 @@ export default async function PostPage({ params }: Props) {
 
   return (
     <article>
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight mb-3">
+      {/* Back link */}
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-sm font-medium mb-8 text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Back to all posts
+      </Link>
+
+      {/* Header */}
+      <header className="mb-12">
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4 leading-tight">
           {post.meta.title}
         </h1>
-        <div
-          className="flex items-center gap-3 text-sm"
-          style={{ color: "var(--color-text-tertiary)" }}
-        >
+        <div className="flex items-center gap-2 text-sm text-[var(--color-text-tertiary)]">
           <time>{date}</time>
-          <span>&middot;</span>
+          <span className="opacity-40">/</span>
           <span>{post.meta.readingTime}</span>
           {post.meta.category && (
             <>
-              <span>&middot;</span>
+              <span className="opacity-40">/</span>
               <span>{post.meta.category}</span>
             </>
           )}
         </div>
         {post.meta.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="flex flex-wrap gap-1.5 mt-5">
             {post.meta.tags.map((tag) => (
               <span
                 key={tag}
-                className="text-xs px-2.5 py-1 rounded-full"
-                style={{
-                  backgroundColor: "var(--color-bg-secondary)",
-                  color: "var(--color-text-secondary)",
-                }}
+                className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]"
               >
                 {tag}
               </span>
             ))}
           </div>
         )}
+        <div className="h-px bg-[var(--color-border)] mt-8" />
       </header>
+
+      {/* Content */}
       <div className="prose">{content}</div>
     </article>
   );
