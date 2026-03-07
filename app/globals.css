@@ -115,7 +115,7 @@ body {
     display: block;
     position: fixed;
     top: 88px;
-    width: 220px;
+    width: 260px;
     left: calc(50% + 430px);
     max-height: calc(100vh - 120px);
     overflow-y: auto;
@@ -124,6 +124,30 @@ body {
 
 [data-theme="dark"] .toc-sidebar {
   box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2) !important;
+}
+
+/* TOC link hover */
+.toc-link {
+  transition: color 180ms ease, background-color 180ms ease, padding-left 180ms ease;
+}
+
+.toc-link:hover {
+  color: var(--color-text-secondary) !important;
+  background-color: var(--color-bg-secondary);
+}
+
+.toc-link.active {
+  color: var(--color-accent) !important;
+  background-color: var(--color-bg-secondary);
+}
+
+/* TOC header button hover */
+.toc-header {
+  transition: background-color 180ms ease;
+}
+
+.toc-header:hover {
+  background-color: var(--color-bg-secondary);
 }
 
 /* Card hover effect */
@@ -298,6 +322,25 @@ body {
 .code-block .line {
   display: inline-block;
   width: 100%;
+}
+
+/* Scroll to top/bottom button */
+.scroll-btn {
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.scroll-btn:hover {
+  background-color: var(--color-bg-secondary) !important;
+  color: var(--color-text) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12) !important;
+}
+
+[data-theme="dark"] .scroll-btn {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3) !important;
+}
+
+[data-theme="dark"] .scroll-btn:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
 }
 
 /* Selection color */

@@ -56,20 +56,21 @@ export function TableOfContents() {
       style={{
         backgroundColor: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 12,
+        borderRadius: 14,
         boxShadow: "0 4px 24px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
         overflow: "hidden",
       }}
     >
       {/* Header */}
       <button
+        className="toc-header"
         onClick={() => setCollapsed(!collapsed)}
         style={{
           width: "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "12px 16px",
+          padding: "14px 18px",
           fontSize: 12,
           fontWeight: 600,
           letterSpacing: "0.06em",
@@ -81,7 +82,7 @@ export function TableOfContents() {
           cursor: "pointer",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="12" x2="15" y2="12" />
@@ -109,13 +110,14 @@ export function TableOfContents() {
 
       {/* Links */}
       {!collapsed && (
-        <ul style={{ listStyle: "none", padding: "8px 0", margin: 0 }}>
+        <ul style={{ listStyle: "none", padding: "6px 0", margin: 0 }}>
           {headings.map((h) => {
             const isActive = activeId === h.id;
             return (
               <li key={h.id}>
                 <a
                   href={`#${h.id}`}
+                  className={`toc-link${isActive ? " active" : ""}`}
                   onClick={(e) => {
                     e.preventDefault();
                     document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth" });
@@ -123,13 +125,12 @@ export function TableOfContents() {
                   style={{
                     display: "block",
                     fontSize: 13,
-                    lineHeight: 1.35,
-                    padding: "5px 16px",
-                    paddingLeft: h.level === 3 ? 28 : 16,
+                    lineHeight: 1.4,
+                    padding: "7px 18px",
+                    paddingLeft: h.level === 3 ? 32 : 18,
+                    borderRadius: 0,
                     color: isActive ? "var(--color-accent)" : "var(--color-text-tertiary)",
-                    backgroundColor: isActive ? "var(--color-bg-secondary)" : "transparent",
                     textDecoration: "none",
-                    transition: "all 150ms ease",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",

@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { ScrollButton } from "@/components/ScrollButton";
 import "./globals.css";
 
 const inter = Inter({
@@ -42,6 +43,7 @@ export default function RootLayout({
               {children}
             </main>
             <Footer />
+            <ScrollButton />
           </div>
         </ThemeProvider>
       </body>
