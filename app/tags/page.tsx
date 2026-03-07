@@ -10,7 +10,7 @@ export default function TagsPage() {
   const tags = getAllTags();
 
   return (
-    <div>
+    <div className="site-container">
       <h1 style={{ fontSize: "clamp(2rem, 5vw, 2.5rem)", fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 12 }}>
         Tags
       </h1>

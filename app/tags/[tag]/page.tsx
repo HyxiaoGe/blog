@@ -24,7 +24,7 @@ export default async function TagPage({ params }: Props) {
   const posts = getPostsByTag(decoded);
 
   return (
-    <div>
+    <div className="site-container">
       {/* Back */}
       <Link
         href="/tags"

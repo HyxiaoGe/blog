@@ -1,11 +1,13 @@
-import { getAllPosts } from "@/lib/posts";
+import Link from "next/link";
+import { getAllPosts, getAllTags } from "@/lib/posts";
 import { PostCard } from "@/components/PostCard";
 
 export default function HomePage() {
   const posts = getAllPosts();
+  const tags = getAllTags();
 
   return (
-    <div>
+    <div className="site-container-wide">
       {/* Hero */}
       <section style={{ marginBottom: 48, paddingTop: 8 }}>
         <div
@@ -34,17 +36,49 @@ export default function HomePage() {
       {/* Divider */}
       <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 32 }} />
 
-      {/* Posts */}
-      <section>
-        <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
-          All Posts
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {posts.map((post) => (
-            <PostCard key={post.slug} post={post} />
-          ))}
+      {/* Two-column layout */}
+      <div className="home-layout">
+        {/* Left: posts */}
+        <div className="home-main">
+          <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
+            All Posts
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {posts.map((post) => (
+              <PostCard key={post.slug} post={post} />
+            ))}
+          </div>
         </div>
-      </section>
+
+        {/* Right: tags sidebar */}
+        <aside className="home-sidebar">
+          <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 16, color: "var(--color-text-tertiary)" }}>
+            Tags
+          </h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {tags.map((tag) => (
+              <Link
+                key={tag.name}
+                href={`/tags/${encodeURIComponent(tag.name)}`}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  backgroundColor: "var(--color-bg-secondary)",
+                  color: "var(--color-text-secondary)",
+                  textDecoration: "none",
+                  border: "1px solid var(--color-border)",
+                  transition: "color 150ms ease, border-color 150ms ease",
+                }}
+              >
+                {tag.name}
+                <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.45 }}>{tag.count}</span>
+              </Link>
+            ))}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -56,7 +56,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Site-wide centered container */
+/* Centered containers */
 .site-container {
   width: 100%;
   max-width: 680px;
@@ -64,6 +64,45 @@ body {
   margin-right: auto;
   padding-left: 24px;
   padding-right: 24px;
+}
+
+.site-container-wide {
+  width: 100%;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* Homepage two-column layout */
+.home-layout {
+  display: flex;
+  gap: 48px;
+}
+
+.home-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 96px;
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .home-layout {
+    flex-direction: column;
+    gap: 32px;
+  }
+  .home-sidebar {
+    width: 100%;
+    position: static;
+  }
 }
 
 /* Card hover effect */

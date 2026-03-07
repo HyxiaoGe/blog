@@ -14,7 +14,7 @@ export function Header() {
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <nav className="site-container" style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <nav className="site-container-wide" style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <div
             style={{
@@ -42,12 +42,6 @@ export function Header() {
             style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
           >
             Blog
-          </Link>
-          <Link
-            href="/tags"
-            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
-          >
-            Tags
           </Link>
           <ThemeToggle />
         </div>
