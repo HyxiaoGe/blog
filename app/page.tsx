@@ -5,51 +5,41 @@ export default function HomePage() {
   const posts = getAllPosts();
 
   return (
-    <div>
+    <div style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24 }}>
       {/* Hero */}
-      <section className="mb-16 pt-4">
+      <section style={{ marginBottom: 48, paddingTop: 8 }}>
         <div
-          className="text-sm font-medium tracking-wide uppercase mb-4"
-          style={{ color: "var(--color-accent)" }}
+          style={{ fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, marginBottom: 16, color: "var(--color-accent)" }}
         >
           Personal Blog
         </div>
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-4 leading-[1.1]">
+        <h1 style={{ fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 16, lineHeight: 1.1 }}>
           Hi, I&apos;m{" "}
           <span
-            className="bg-clip-text text-transparent"
             style={{
-              backgroundImage:
-                "linear-gradient(135deg, var(--color-gradient-1), var(--color-gradient-2))",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              color: "transparent",
+              backgroundImage: "linear-gradient(135deg, var(--color-gradient-1), var(--color-gradient-2))",
             }}
           >
             Sean
           </span>
         </h1>
-        <p
-          className="text-lg leading-relaxed max-w-[540px]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Writing about software engineering, AI, and things I&apos;ve learned
-          along the way.
+        <p style={{ fontSize: 18, lineHeight: 1.6, maxWidth: 560, color: "var(--color-text-secondary)" }}>
+          Writing about software engineering, AI, and things I&apos;ve learned along the way.
         </p>
       </section>
 
       {/* Divider */}
-      <div
-        className="mb-10 h-px"
-        style={{ backgroundColor: "var(--color-border)" }}
-      />
+      <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 32 }} />
 
-      {/* Posts */}
+      {/* Posts grid */}
       <section>
-        <h2
-          className="text-xs font-semibold tracking-widest uppercase mb-6"
-          style={{ color: "var(--color-text-tertiary)" }}
-        >
+        <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
           All Posts
         </h2>
-        <div className="flex flex-col gap-4">
+        <div className="posts-grid">
           {posts.map((post) => (
             <PostCard key={post.slug} post={post} />
           ))}

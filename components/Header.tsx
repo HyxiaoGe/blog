@@ -14,8 +14,8 @@ export function Header() {
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <nav style={{ maxWidth: 720, marginLeft: "auto", marginRight: "auto", paddingLeft: 20, paddingRight: 20, height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Link href="/" className="group" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+      <nav style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24, height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <div
             style={{
               width: 32,
@@ -32,17 +32,14 @@ export function Header() {
           >
             H
           </div>
-          <span
-            style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--color-text)" }}
-          >
+          <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--color-text)" }}>
             HyxiaoGe
           </span>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Link
             href="/"
-            className="nav-link"
-            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none", transition: "color 150ms ease" }}
+            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
           >
             Blog
           </Link>

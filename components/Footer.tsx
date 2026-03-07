@@ -3,13 +3,10 @@ import Link from "next/link";
 export function Footer() {
   return (
     <footer style={{ borderTop: "1px solid var(--color-border)", marginTop: 64 }}>
-      <div style={{ maxWidth: 720, marginLeft: "auto", marginRight: "auto", paddingLeft: 20, paddingRight: 20, paddingTop: 40, paddingBottom: 40 }}>
+      <div style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24, paddingTop: 40, paddingBottom: 40 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
-            <Link
-              href="/"
-              style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text)", textDecoration: "none" }}
-            >
+            <Link href="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text)", textDecoration: "none" }}>
               HyxiaoGe
             </Link>
             <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 4 }}>
@@ -20,7 +17,7 @@ export function Footer() {
             href="https://github.com/HyxiaoGe"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "var(--color-text-tertiary)", transition: "color 150ms ease" }}
+            style={{ color: "var(--color-text-tertiary)" }}
             aria-label="GitHub"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

@@ -56,6 +56,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Posts grid - responsive */
+.posts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .posts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
 /* Card hover effect */
 .card-hover {
   box-shadow: var(--shadow-card);

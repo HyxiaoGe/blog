@@ -43,51 +43,53 @@ export default async function PostPage({ params }: Props) {
   });
 
   return (
-    <article>
-      {/* Back link */}
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-sm font-medium mb-8 text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        Back to all posts
-      </Link>
+    <div style={{ maxWidth: 760, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24 }}>
+      <article>
+        {/* Back link */}
+        <Link
+          href="/"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 500, marginBottom: 32, color: "var(--color-text-tertiary)", textDecoration: "none" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          Back to all posts
+        </Link>
 
-      {/* Header */}
-      <header className="mb-12">
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4 leading-tight">
-          {post.meta.title}
-        </h1>
-        <div className="flex items-center gap-2 text-sm text-[var(--color-text-tertiary)]">
-          <time>{date}</time>
-          <span className="opacity-40">/</span>
-          <span>{post.meta.readingTime}</span>
-          {post.meta.category && (
-            <>
-              <span className="opacity-40">/</span>
-              <span>{post.meta.category}</span>
-            </>
-          )}
-        </div>
-        {post.meta.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-5">
-            {post.meta.tags.map((tag) => (
-              <span
-                key={tag}
-                className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]"
-              >
-                {tag}
-              </span>
-            ))}
+        {/* Header */}
+        <header style={{ marginBottom: 48 }}>
+          <h1 style={{ fontSize: "clamp(1.75rem, 4vw, 2.25rem)", fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 16, lineHeight: 1.2 }}>
+            {post.meta.title}
+          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--color-text-tertiary)" }}>
+            <time>{date}</time>
+            <span style={{ opacity: 0.4 }}>/</span>
+            <span>{post.meta.readingTime}</span>
+            {post.meta.category && (
+              <>
+                <span style={{ opacity: 0.4 }}>/</span>
+                <span>{post.meta.category}</span>
+              </>
+            )}
           </div>
-        )}
-        <div className="h-px bg-[var(--color-border)] mt-8" />
-      </header>
+          {post.meta.tags.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 20 }}>
+              {post.meta.tags.map((tag) => (
+                <span
+                  key={tag}
+                  style={{ fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 6, backgroundColor: "var(--color-bg-secondary)", color: "var(--color-text-tertiary)" }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ height: 1, backgroundColor: "var(--color-border)", marginTop: 32 }} />
+        </header>
 
-      {/* Content */}
-      <div className="prose">{content}</div>
-    </article>
+        {/* Content */}
+        <div className="prose">{content}</div>
+      </article>
+    </div>
   );
 }
