@@ -5,7 +5,7 @@ export default function HomePage() {
   const posts = getAllPosts();
 
   return (
-    <div style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24 }}>
+    <div>
       {/* Hero */}
       <section style={{ marginBottom: 48, paddingTop: 8 }}>
         <div
@@ -26,7 +26,7 @@ export default function HomePage() {
             Sean
           </span>
         </h1>
-        <p style={{ fontSize: 18, lineHeight: 1.6, maxWidth: 560, color: "var(--color-text-secondary)" }}>
+        <p style={{ fontSize: 18, lineHeight: 1.6, color: "var(--color-text-secondary)" }}>
           Writing about software engineering, AI, and things I&apos;ve learned along the way.
         </p>
       </section>
@@ -34,12 +34,12 @@ export default function HomePage() {
       {/* Divider */}
       <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 32 }} />
 
-      {/* Posts grid */}
+      {/* Posts */}
       <section>
         <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
           All Posts
         </h2>
-        <div className="posts-grid">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {posts.map((post) => (
             <PostCard key={post.slug} post={post} />
           ))}

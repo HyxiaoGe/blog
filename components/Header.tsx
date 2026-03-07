@@ -14,7 +14,7 @@ export function Header() {
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <nav style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24, height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <nav className="site-container" style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <div
             style={{

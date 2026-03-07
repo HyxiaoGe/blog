@@ -38,7 +38,7 @@ export default function RootLayout({
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
           <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
             <Header />
-            <main style={{ flex: 1, width: "100%", paddingTop: 64, paddingBottom: 64 }}>
+            <main className="site-container" style={{ flex: 1, paddingTop: 64, paddingBottom: 64 }}>
               {children}
             </main>
             <Footer />

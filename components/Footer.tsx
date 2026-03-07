@@ -3,7 +3,7 @@ import Link from "next/link";
 export function Footer() {
   return (
     <footer style={{ borderTop: "1px solid var(--color-border)", marginTop: 64 }}>
-      <div style={{ maxWidth: 1100, marginLeft: "auto", marginRight: "auto", paddingLeft: 24, paddingRight: 24, paddingTop: 40, paddingBottom: 40 }}>
+      <div className="site-container" style={{ paddingTop: 40, paddingBottom: 40 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
             <Link href="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text)", textDecoration: "none" }}>
