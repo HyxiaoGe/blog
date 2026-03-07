@@ -105,11 +105,7 @@ body {
   }
 }
 
-/* Article page wrapper with TOC */
-.article-wrapper {
-  position: relative;
-}
-
+/* TOC floating sidebar */
 .toc-sidebar {
   display: none;
 }
@@ -118,12 +114,16 @@ body {
   .toc-sidebar {
     display: block;
     position: fixed;
-    top: 100px;
-    width: 200px;
-    left: calc(50% + 440px);
-    max-height: calc(100vh - 140px);
+    top: 88px;
+    width: 220px;
+    left: calc(50% + 430px);
+    max-height: calc(100vh - 120px);
     overflow-y: auto;
   }
+}
+
+[data-theme="dark"] .toc-sidebar {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2) !important;
 }
 
 /* Card hover effect */
