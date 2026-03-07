@@ -59,7 +59,7 @@ body {
 /* Centered containers */
 .site-container {
   width: 100%;
-  max-width: 680px;
+  max-width: 800px;
   margin-left: auto;
   margin-right: auto;
   padding-left: 24px;
