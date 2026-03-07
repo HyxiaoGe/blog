@@ -324,6 +324,25 @@ body {
   width: 100%;
 }
 
+/* Nav link hover */
+.nav-link {
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.nav-link:hover {
+  color: var(--color-text) !important;
+  background-color: var(--color-bg-secondary);
+}
+
+/* Project link hover */
+.project-link {
+  transition: color 180ms ease;
+}
+
+.project-link:hover {
+  color: var(--color-accent) !important;
+}
+
 /* Pagination button hover */
 .pagination-btn {
   transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;

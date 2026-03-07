@@ -37,12 +37,20 @@ export function Header() {
           </span>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <Link
-            href="/"
-            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
-          >
-            Blog
-          </Link>
+          {[
+            { href: "/", label: "Blog" },
+            { href: "/projects", label: "Projects" },
+            { href: "/about", label: "About" },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="nav-link"
+              style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
+            >
+              {link.label}
+            </Link>
+          ))}
           <ThemeToggle />
         </div>
       </nav>
