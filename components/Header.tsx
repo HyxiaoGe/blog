@@ -43,6 +43,12 @@ export function Header() {
           >
             Blog
           </Link>
+          <Link
+            href="/tags"
+            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none" }}
+          >
+            Tags
+          </Link>
           <ThemeToggle />
         </div>
       </nav>

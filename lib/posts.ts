@@ -43,6 +43,25 @@ export function getAllPosts(): PostMeta[] {
   return posts;
 }
 
+export function getAllTags(): { name: string; count: number }[] {
+  const posts = getAllPosts();
+  const tagMap = new Map<string, number>();
+  for (const post of posts) {
+    for (const tag of post.tags) {
+      tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+    }
+  }
+  return Array.from(tagMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function getPostsByTag(tag: string): PostMeta[] {
+  return getAllPosts().filter((post) =>
+    post.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
+  );
+}
+
 export function getPostBySlug(slug: string): { meta: PostMeta; content: string } {
   const mdxPath = path.join(postsDirectory, `${slug}.mdx`);
   const mdPath = path.join(postsDirectory, `${slug}.md`);

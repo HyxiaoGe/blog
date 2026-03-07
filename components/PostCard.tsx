@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { PostMeta } from "@/lib/posts";
 
@@ -65,12 +67,15 @@ export function PostCard({ post }: { post: PostMeta }) {
           {post.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {post.tags.map((tag) => (
-                <span
+                <Link
                   key={tag}
-                  className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]"
+                  href={`/tags/${encodeURIComponent(tag)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+                  style={{ textDecoration: "none" }}
                 >
                   {tag}
-                </span>
+                </Link>
               ))}
             </div>
           )}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { renderMDX } from "@/lib/mdx";
+import { TableOfContents } from "@/components/TableOfContents";
 import type { Metadata } from "next";
 
 interface Props {
@@ -74,17 +75,21 @@ export default async function PostPage({ params }: Props) {
         {post.meta.tags.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 20 }}>
             {post.meta.tags.map((tag) => (
-              <span
+              <Link
                 key={tag}
-                style={{ fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 6, backgroundColor: "var(--color-bg-secondary)", color: "var(--color-text-tertiary)" }}
+                href={`/tags/${encodeURIComponent(tag)}`}
+                style={{ fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 6, backgroundColor: "var(--color-bg-secondary)", color: "var(--color-text-tertiary)", textDecoration: "none" }}
               >
                 {tag}
-              </span>
+              </Link>
             ))}
           </div>
         )}
         <div style={{ height: 1, backgroundColor: "var(--color-border)", marginTop: 32 }} />
       </header>
+
+      {/* TOC */}
+      <TableOfContents />
 
       {/* Content */}
       <div className="prose">{content}</div>
