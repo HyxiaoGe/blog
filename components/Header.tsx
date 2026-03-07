@@ -30,10 +30,10 @@ export function Header() {
               backgroundImage: "linear-gradient(135deg, var(--color-gradient-1), var(--color-gradient-2))",
             }}
           >
-            H
+            S
           </div>
           <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--color-text)" }}>
-            HyxiaoGe
+            Sean&apos;s Blog
           </span>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

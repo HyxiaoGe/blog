@@ -20,15 +20,15 @@ const siteUrl = "https://hyxiao.io";
 
 export const metadata: Metadata = {
   title: {
-    default: "HyxiaoGe",
-    template: "%s | HyxiaoGe",
+    default: "Sean's Blog",
+    template: "%s | Sean's Blog",
   },
   description: "Sean's personal blog about software engineering and AI.",
   metadataBase: new URL(siteUrl),
   openGraph: {
     type: "website",
     locale: "zh_CN",
-    siteName: "HyxiaoGe",
+    siteName: "Sean's Blog",
   },
   twitter: {
     card: "summary",
