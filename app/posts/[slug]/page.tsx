@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { renderMDX } from "@/lib/mdx";
 import { TableOfContents } from "@/components/TableOfContents";
+import { ReadingProgress } from "@/components/ReadingProgress";
 import type { Metadata } from "next";
 
 interface Props {
@@ -93,6 +94,7 @@ export default async function PostPage({ params }: Props) {
       <div className="prose">{content}</div>
     </article>
 
+    <ReadingProgress />
     <TableOfContents />
     </>
   );
