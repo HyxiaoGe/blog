@@ -44,7 +44,8 @@ export default async function PostPage({ params }: Props) {
   });
 
   return (
-    <article>
+    <>
+    <article className="site-container">
       {/* Back link */}
       <Link
         href="/"
@@ -88,11 +89,11 @@ export default async function PostPage({ params }: Props) {
         <div style={{ height: 1, backgroundColor: "var(--color-border)", marginTop: 32 }} />
       </header>
 
-      {/* TOC */}
-      <TableOfContents />
-
       {/* Content */}
       <div className="prose">{content}</div>
     </article>
+
+    <TableOfContents />
+    </>
   );
 }

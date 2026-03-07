@@ -25,11 +25,7 @@ export function TableOfContents() {
         .replace(/[^\w\u4e00-\u9fff]+/g, "-")
         .replace(/^-|-$/g, "");
       el.id = id;
-      items.push({
-        id,
-        text,
-        level: el.tagName === "H2" ? 2 : 3,
-      });
+      items.push({ id, text, level: el.tagName === "H2" ? 2 : 3 });
     });
     setHeadings(items);
 
@@ -49,29 +45,14 @@ export function TableOfContents() {
     return () => observer.disconnect();
   }, []);
 
-  if (headings.length < 3) return null;
+  if (headings.length < 3) {
+    return <nav className="toc-sidebar" />;
+  }
 
   return (
-    <nav
-      style={{
-        marginBottom: 40,
-        padding: "20px 24px",
-        borderRadius: 12,
-        backgroundColor: "var(--color-bg-secondary)",
-        border: "1px solid var(--color-border)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase" as const,
-          color: "var(--color-text-tertiary)",
-          marginBottom: 12,
-        }}
-      >
-        Table of Contents
+    <nav className="toc-sidebar">
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
+        On this page
       </div>
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {headings.map((h) => (
@@ -84,11 +65,13 @@ export function TableOfContents() {
               }}
               style={{
                 display: "block",
-                fontSize: 14,
-                lineHeight: 1.5,
-                padding: "4px 0",
-                paddingLeft: h.level === 3 ? 16 : 0,
-                color: activeId === h.id ? "var(--color-accent)" : "var(--color-text-secondary)",
+                fontSize: 13,
+                lineHeight: 1.4,
+                padding: "3px 0",
+                borderLeft: activeId === h.id ? "2px solid var(--color-accent)" : "2px solid transparent",
+                paddingLeft: h.level === 3 ? 14 : 2,
+                marginLeft: -2,
+                color: activeId === h.id ? "var(--color-accent)" : "var(--color-text-tertiary)",
                 textDecoration: "none",
                 transition: "color 150ms ease",
               }}

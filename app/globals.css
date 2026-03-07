@@ -105,6 +105,27 @@ body {
   }
 }
 
+/* Article page wrapper with TOC */
+.article-wrapper {
+  position: relative;
+}
+
+.toc-sidebar {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .toc-sidebar {
+    display: block;
+    position: fixed;
+    top: 100px;
+    width: 200px;
+    left: calc(50% + 440px);
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+}
+
 /* Card hover effect */
 .card-hover {
   box-shadow: var(--shadow-card);
