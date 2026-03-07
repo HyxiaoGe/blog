@@ -7,12 +7,12 @@ import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-inter",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-jetbrains",
 });
 
 export const metadata: Metadata = {
@@ -34,11 +34,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body>
+      <body style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}>
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
-          <div className="min-h-screen flex flex-col">
+          <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
             <Header />
-            <main className="flex-1 w-full max-w-[720px] mx-auto px-5 py-16">
+            <main style={{ flex: 1, width: "100%", maxWidth: 720, marginLeft: "auto", marginRight: "auto", paddingLeft: 20, paddingRight: 20, paddingTop: 64, paddingBottom: 64 }}>
               {children}
             </main>
             <Footer />

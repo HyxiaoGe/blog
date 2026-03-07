@@ -6,35 +6,43 @@ import { ThemeToggle } from "./ThemeToggle";
 export function Header() {
   return (
     <header
-      className="sticky top-0 z-50 backdrop-blur-md border-b"
+      className="sticky top-0 z-50"
       style={{
-        borderColor: "var(--color-border)",
+        borderBottom: "1px solid var(--color-border)",
         backgroundColor: "color-mix(in srgb, var(--color-bg) 85%, transparent)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <nav className="max-w-[720px] mx-auto px-5 h-16 flex items-center justify-between">
-        <Link href="/" className="group flex items-center gap-2">
+      <nav style={{ maxWidth: 720, marginLeft: "auto", marginRight: "auto", paddingLeft: 20, paddingRight: 20, height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Link href="/" className="group" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
             style={{
-              backgroundImage:
-                "linear-gradient(135deg, var(--color-gradient-1), var(--color-gradient-2))",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontSize: 14,
+              fontWeight: 700,
+              backgroundImage: "linear-gradient(135deg, var(--color-gradient-1), var(--color-gradient-2))",
             }}
           >
             H
           </div>
           <span
-            className="text-base font-semibold tracking-tight transition-colors duration-150"
-            style={{ color: "var(--color-text)" }}
+            style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--color-text)" }}
           >
             HyxiaoGe
           </span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Link
             href="/"
-            className="text-sm font-medium px-3 py-2 rounded-lg transition-all duration-150 hover:bg-[var(--color-bg-secondary)]"
-            style={{ color: "var(--color-text-secondary)" }}
+            className="nav-link"
+            style={{ fontSize: 14, fontWeight: 500, padding: "8px 12px", borderRadius: 8, color: "var(--color-text-secondary)", textDecoration: "none", transition: "color 150ms ease" }}
           >
             Blog
           </Link>
