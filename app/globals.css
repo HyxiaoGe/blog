@@ -324,6 +324,16 @@ body {
   width: 100%;
 }
 
+/* Pagination button hover */
+.pagination-btn {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.pagination-btn:not(:disabled):hover {
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+}
+
 /* Scroll to top/bottom button */
 .scroll-btn {
   transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAllPosts, getAllTags } from "@/lib/posts";
-import { PostCard } from "@/components/PostCard";
+import { PostList } from "@/components/PostList";
 
 export default function HomePage() {
   const posts = getAllPosts();
@@ -43,11 +43,7 @@ export default function HomePage() {
           <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
             All Posts
           </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {posts.map((post) => (
-              <PostCard key={post.slug} post={post} />
-            ))}
-          </div>
+          <PostList posts={posts} />
         </div>
 
         {/* Right: tags sidebar */}
