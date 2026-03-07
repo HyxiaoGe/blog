@@ -1,0 +1,424 @@
+---
+title: 从零搭建个人开发服务器：Docker 部署 + CI/CD + 监控的完整实践
+date: 2026-03-07 20:00:00
+tags:
+  - Docker
+  - DevOps
+  - CI/CD
+categories: DevOps
+---
+
+作为一个独立开发者，手头积累了不少项目：FastAPI 后端、Next.js 前端、各种 AI 应用。它们散落在本地开发机上，每次想演示或者跑联调都很麻烦。于是决定利用家里一台闲置的 Ubuntu 主机，搭建一套完整的开发服务器环境。
+
+这篇文章记录了从零开始的全过程：容器化部署、CI/CD 自动化、内网穿透、运维加固、监控体系，最终实现 **push 代码自动部署、域名访问、实时监控** 的完整工作流。
+
+
+
+## 整体架构
+
+### 服务器概况
+
+- **硬件**：家用主机，12GB 内存
+- **系统**：Ubuntu，Docker 29.1.3，Compose v5.0.0
+- **内网 IP**：192.168.1.10
+
+### 架构设计
+
+**部署流程**：本地开发 → git push → GitHub Actions → Self-hosted Runner → Docker Compose 构建部署
+
+**服务器上运行的服务（192.168.1.10）**：
+
+| 分类 | 服务 | 端口 |
+|------|------|------|
+| 反向代理 | Nginx | :80 |
+| 业务应用 | auth-service / prompthub / idea-generator / ai-audio-assistant / chrono / smart-ledger | :8100 ~ :3003 |
+| 共享中间件 | PostgreSQL / Redis / MinIO | :5432 / :6379 / :9000 |
+| 监控 | Grafana / Prometheus / Uptime Kuma / Dozzle | :3333 / :9999 / :3030 / :3031 |
+
+核心设计原则：
+- **中间件复用**：PostgreSQL、Redis、MinIO 只部署一套，所有项目共享
+- **网络隔离**：通过 Docker Network 控制服务间的互通关系
+- **统一入口**：Nginx 反向代理，用域名替代端口号
+
+## 项目容器化部署
+
+### 共享中间件
+
+服务器上已有 PostgreSQL、Redis、MinIO 三个中间件容器在运行。所有项目通过内网 IP 连接，不在各自的 docker-compose 里重复部署：
+
+```yaml
+# 各项目 .env 中的连接方式
+DATABASE_URL=postgresql+asyncpg://user:pass@192.168.1.10:5432/mydb
+REDIS_URL=redis://192.168.1.10:6379/0
+MINIO_ENDPOINT=192.168.1.10:9000
+```
+
+这样做的好处是数据集中管理，备份只需要备份一个 PostgreSQL 实例。
+
+### Docker 网络设计
+
+不同项目之间有依赖关系，通过外部网络实现互通：
+
+| 网络名 | 用途 |
+|--------|------|
+| nano-banana-network | auth-service 与 idea-generator 互通 |
+| ai-audio-network | prompthub 与 ai-audio-assistant 互通 |
+| chrono_default | chrono 前后端互通 |
+
+```yaml
+# docker-compose.yml 中使用外部网络
+networks:
+  nano-banana-network:
+    external: true
+```
+
+关键点：使用 `external: true` 而不是 `name:`。后者会尝试创建网络，如果网络已存在会报冲突。
+
+### FastAPI 后端 Dockerfile
+
+后端统一使用 uv 作为包管理器：
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY . .
+EXPOSE 8000
+CMD ["uv", "run", "fastapi", "run", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### Next.js 前端 Dockerfile
+
+前端使用多阶段构建 + standalone 模式，镜像体积从 1GB+ 压缩到 ~100MB：
+
+```dockerfile
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN corepack enable && pnpm build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
+注意：需要在 `next.config.ts` 中添加 `output: "standalone"` 才能使用 standalone 模式。
+
+### 环境变量管理
+
+统一将环境变量放在 `.env` 文件中，docker-compose.yml 只通过 `env_file` 引用：
+
+```yaml
+services:
+  api:
+    build: .
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+```
+
+避免在 docker-compose.yml 的 `environment` 里硬编码配置，减少重复，也降低了敏感信息泄露的风险。
+
+## CI/CD 自动部署
+
+### 方案选型
+
+最初考虑过通过 SSH 远程执行部署命令（用 `appleboy/ssh-action`），但开发服务器在内网，GitHub 云端 Runner 无法直连。虽然有 frp 内网穿透，但多了一层依赖，不够稳定。
+
+最终选择了 **Self-hosted Runner**：在服务器上运行 GitHub Actions Runner，直接在本地执行部署命令。
+
+优势：
+- 不依赖外部网络，直接在服务器上执行
+- 不需要管理 SSH 密钥和 Secrets
+- 业界主流方案
+
+### Workflow 配置
+
+每个项目一个 `deploy.yml`，模板很简洁：
+
+```yaml
+name: Deploy to Dev Server
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: |
+          cd ~/project/<项目名>
+          git pull
+          docker compose up -d --build
+          docker image prune -f
+```
+
+注意这里没有 `docker compose down`——直接 `up -d --build` 会自动重建有变更的容器，没变更的容器不受影响，减少停机时间。
+
+### Runner 注册
+
+每个仓库需要一个独立的 Runner 实例。保留了一个干净的 `runner-fresh` 目录作为模板：
+
+```bash
+# 获取注册 token
+gh api -X POST "repos/HyxiaoGe/<repo>/actions/runners/registration-token" --jq '.token'
+
+# 复制模板并注册
+cp -r runner-fresh runner-<repo>
+cd runner-<repo>
+./config.sh --url "https://github.com/HyxiaoGe/<repo>" \
+  --token "<token>" \
+  --name "dev-server-<repo>" \
+  --labels self-hosted,linux \
+  --unattended
+```
+
+## 内网穿透（frp）
+
+开发服务器在家庭内网，外出时需要远程访问。使用 frp 通过一台云服务器中转 SSH 连接。
+
+### 架构
+
+```
+外部设备 → ssh -p 22222 云服务器(39.108.189.204) → frps → frpc(192.168.1.10) → SSH
+```
+
+### 踩坑记录
+
+配置看起来很简单，但排查了相当长时间。frpc 一直报 `session shutdown`，排查过程：
+
+1. **检查 frps 是否在运行** → 正常，版本 0.54.0 一致
+2. **检查 token 是否匹配** → 一致
+3. **检查防火墙** → iptables/firewalld 都没有拦截
+4. **tcpdump 抓包** → 发现流量根本没到达云服务器
+
+最终定位到 **阿里云安全组**：
+
+- frps 监听的 48293 端口有一条 **DENY 规则**（优先级 1）
+- 删掉 DENY 后新加了 ALLOW 规则，但源 IP 填错了
+- 通过 `curl ifconfig.me` 发现服务器的公网出口 IP 与预期不同（多层 NAT）
+- 改为 `0.0.0.0/0` 后恢复正常
+
+教训：安全组排查时，**同优先级的 DENY 规则优先于 ALLOW 规则**。而且内网服务器的出口 IP 不一定是你以为的那个。
+
+### 安全加固
+
+frp 隧道暴露了 SSH 端口到公网，需要加固：
+
+```bash
+# 关闭 SSH 密码登录，只允许密钥认证
+sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
+```
+
+## 运维加固
+
+### systemd 持久化
+
+frpc 和所有 Runner 都用 `nohup` 启动，服务器重启后全部丢失。注册为 systemd 服务：
+
+```ini
+[Unit]
+Description=GitHub Actions Runner (chrono)
+After=network.target
+
+[Service]
+Type=simple
+User=heyanxiao
+WorkingDirectory=/home/heyanxiao/actions-runner/runner-chrono
+ExecStart=/home/heyanxiao/actions-runner/runner-chrono/run.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now github-runner-chrono
+```
+
+一共注册了 8 个服务（1 个 frpc + 7 个 Runner），重启后自动恢复。
+
+### 数据库自动备份
+
+所有项目共享一个 PostgreSQL 实例，数据不能丢：
+
+```bash
+# crontab
+# 每天凌晨 3:00 全量备份
+0 3 * * * docker exec postgres pg_dumpall -U admin | gzip > ~/backups/postgresql/pg_$(date +\%Y\%m\%d).sql.gz
+# 每天凌晨 4:00 清理 7 天前的备份
+0 4 * * * find ~/backups/postgresql -name "pg_*.sql.gz" -mtime +7 -delete
+```
+
+### Docker 日志轮转
+
+Docker 默认不限制日志大小，长期运行会吃满磁盘：
+
+```json
+// /etc/docker/daemon.json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "50m",
+    "max-file": "3"
+  }
+}
+```
+
+新容器自动生效，每个容器最多 150MB 日志。
+
+### 容器资源限制
+
+防止单个服务内存泄漏拖垮整台机器：
+
+```yaml
+deploy:
+  resources:
+    limits:
+      memory: 512M  # 后端服务
+      # memory: 256M  # 前端/轻量服务
+```
+
+部署后通过 `docker stats` 验证，发现有个 Worker 容器内存占用 99%，及时调大到 1G 避免 OOM。
+
+## Nginx 反向代理
+
+告别记端口号的日子，用域名访问所有服务：
+
+```nginx
+server {
+    listen 80;
+    server_name chrono-ui.dev.local;
+    location / {
+        proxy_pass http://192.168.1.10:3003;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+本地 Mac 的 `/etc/hosts` 添加映射：
+
+```
+192.168.1.10 auth.dev.local prompthub.dev.local idea.dev.local idea-ui.dev.local
+192.168.1.10 audio.dev.local audio-ui.dev.local chrono.dev.local chrono-ui.dev.local
+192.168.1.10 grafana.dev.local ledger.dev.local status.dev.local logs.dev.local
+```
+
+现在访问 `http://chrono-ui.dev.local` 就能直接打开 Chrono 的前端页面。
+
+## 监控体系
+
+### Uptime Kuma — 服务状态监控
+
+类似于 OpenAI Status、Anthropic Status 的自托管方案，单容器部署：
+
+```yaml
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    ports:
+      - "3030:3001"
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+```
+
+配置了 13 个监控项，分三组展示在 Status Page 上：
+
+- **Frontend**：4 个前端应用
+- **Backend API**：5 个后端服务
+- **Infrastructure**：PostgreSQL、Redis、MinIO、Grafana
+
+每 60 秒自动检查，服务异常时 Status Page 实时反映。
+
+访问地址：`http://status.dev.local/status/dev-server`
+
+### Dozzle — 实时日志查看器
+
+排查问题第一步就是看日志。Dozzle 提供了一个 Web 界面，可以同时查看所有容器的实时日志：
+
+```yaml
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    ports:
+      - "3031:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+```
+
+零配置、只读挂载 Docker Socket、占用极小（~10MB 内存）。访问 `http://logs.dev.local` 即可使用。
+
+### Grafana + Prometheus
+
+已有的指标监控体系，包含：
+- **node-exporter**：主机 CPU、内存、磁盘、网络指标
+- **postgres-exporter**：PostgreSQL 连接数、查询性能
+- **redis-exporter**：Redis 内存使用、命令统计
+
+三套监控各司其职：Prometheus 管指标，Uptime Kuma 管可用性，Dozzle 管日志。
+
+## 最终成果
+
+### 服务一览
+
+| 域名 | 服务 | 技术栈 |
+|------|------|--------|
+| idea-ui.dev.local | Idea Generator | Next.js + FastAPI |
+| audio-ui.dev.local | AI Audio Assistant | Next.js + FastAPI + Celery |
+| chrono-ui.dev.local | Chrono | Next.js + FastAPI |
+| ledger.dev.local | Smart Ledger | - |
+| auth.dev.local | Auth Service | FastAPI |
+| prompthub.dev.local | PromptHub | FastAPI |
+| grafana.dev.local | Grafana | 监控面板 |
+| status.dev.local | Uptime Kuma | 服务状态页 |
+| logs.dev.local | Dozzle | 实时日志 |
+
+### 工作流
+
+1. 本地写代码，`git push` 到 GitHub
+2. GitHub Actions 触发，Self-hosted Runner 在服务器上执行
+3. 自动 `git pull` + `docker compose up -d --build`
+4. 服务更新，Uptime Kuma 持续监控状态
+5. 出问题？打开 `logs.dev.local` 看实时日志
+
+### 后续规划
+
+- **Cloudflare Tunnel**：将服务暴露到公网，需要一个域名
+- **Grafana 告警**：配置 SMTP 邮件通知，磁盘满、服务挂了自动告警
+
+## 写在最后
+
+一天时间，把散落的项目整合成了一个有模有样的开发环境。最大的感受是：**基础设施投入的回报是持续的**。之前每次想跑个演示都要手动折腾，现在 push 一下就自动部署好了，域名直接访问，出了问题有监控告诉你。
+
+整套方案没有用任何付费服务（除了已有的云服务器），所有工具都是开源自托管的。对于个人开发者或者小团队来说，这套配置足够用了。
