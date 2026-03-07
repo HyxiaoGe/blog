@@ -16,12 +16,23 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
 });
 
+const siteUrl = "https://hyxiao.io";
+
 export const metadata: Metadata = {
   title: {
     default: "HyxiaoGe",
     template: "%s | HyxiaoGe",
   },
   description: "Sean's personal blog about software engineering and AI.",
+  metadataBase: new URL(siteUrl),
+  openGraph: {
+    type: "website",
+    locale: "zh_CN",
+    siteName: "HyxiaoGe",
+  },
+  twitter: {
+    card: "summary",
+  },
 };
 
 export default function RootLayout({
