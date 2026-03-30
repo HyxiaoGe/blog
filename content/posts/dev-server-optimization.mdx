@@ -1,0 +1,388 @@
+---
+title: 开发服务器大扫除：Docker 瘦身 + 磁盘扩容 + Syncthing 三端同步
+date: 2026-03-30 22:00:00
+tags:
+  - Docker
+  - DevOps
+  - Syncthing
+  - Linux
+categories: DevOps
+---
+
+开发服务器跑了一个月，磁盘占用悄悄飙到了 77%。排查下来发现 Docker Build Cache 吃掉了 249GB。借这个契机，做了一次完整的服务器优化：清理磁盘、优化 Dockerfile、挂载闲置硬盘、搭建 Samba + Syncthing 三端文件同步。
+
+这篇文章记录了整个过程，适合同样在家用服务器上跑 Docker 的开发者参考。
+
+
+
+## 问题发现：磁盘占用 77%
+
+一次例行检查发现系统盘告急：
+
+```bash
+$ df -h /
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda2       457G  334G  100G  77% /
+
+$ docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          36        28        15.83GB   11.27GB (71%)
+Containers      29        26        301.4MB   86.51MB (28%)
+Local Volumes   70        6         16.99GB   12.02GB (70%)
+Build Cache     2545      0         249.2GB   238.1GB
+```
+
+**Build Cache 占了 249GB**，其中 238GB 可回收。这是罪魁祸首。
+
+## 第一步：清理 Build Cache
+
+Build Cache 是 `docker build` 过程中缓存的中间层，用来加速后续构建。清理它不会影响正在运行的容器和镜像，唯一的代价是下次 build 会慢一些。
+
+```bash
+$ docker builder prune -a -f
+```
+
+清理效果立竿见影：
+
+| 指标 | 清理前 | 清理后 |
+|------|--------|--------|
+| 磁盘占用 | 334G (77%) | 102G (24%) |
+| 可用空间 | 100G | 333G |
+
+释放了 **232GB**。
+
+## 第二步：Dockerfile 全面审计
+
+清理只是治标，Build Cache 膨胀的根源在于 Dockerfile 配置不合理。对 `~/code` 下所有项目的 Dockerfile 做了一次全面审计。
+
+### 审计发现的三类问题
+
+**P0 - 缺少 .dockerignore（8/12 个项目）**
+
+没有 `.dockerignore` 意味着每次 `docker build` 时，`.git`、`node_modules`、`__pycache__`、`.venv` 等大目录都会被发送到构建上下文，极大地增加 Build Cache 体积。
+
+为 Python 后端项目创建的 `.dockerignore`：
+
+```
+.git
+.venv
+.env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+tests
+*.md
+.vscode
+.idea
+```
+
+为 Next.js 前端项目创建的 `.dockerignore`：
+
+```
+.git
+node_modules
+.next
+.env*
+coverage
+*.md
+.vscode
+.idea
+.husky
+```
+
+**P1 - 缺少构建优化**
+
+- `apt-get install` 未使用 `--no-install-recommends`，安装了不必要的推荐包
+- `pip install` 未使用 `--no-cache-dir`，pip 缓存留在了镜像层里
+- `npm install` 后未执行 `npm cache clean --force`
+
+**P2 - 生产镜像带开发参数**
+
+两个项目的 Dockerfile CMD 中带了 `--reload` 参数，这是 uvicorn 的开发热重载功能，在生产容器中完全不需要，还会增加 CPU 开销：
+
+```dockerfile
+# 修改前
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# 修改后
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+## 第三步：优化 CI/CD 部署流程
+
+### 问题分析
+
+所有项目的 GitHub Actions deploy workflow 都是同一个模式：
+
+```yaml
+- name: Deploy
+  run: |
+    cd ~/project/xxx
+    git pull
+    docker compose up -d --build  # 每次都 rebuild
+    docker image prune -f
+```
+
+每次 push 都触发 `--build`，即使只改了一行业务代码，也要重新构建整个镜像。这是 Build Cache 膨胀的根本原因。
+
+### 解决方案：智能判断 + 自动清理
+
+**对于 Python 后端项目**（已挂载源码的）：
+
+源码通过 Docker Volume 挂载到容器内，代码变更不需要 rebuild，只有依赖或 Dockerfile 变了才需要：
+
+```yaml
+- name: Deploy
+  run: |
+    cd ~/project/xxx
+    git pull
+    if git diff HEAD~1 --name-only | grep -qE 'pyproject\.toml|uv\.lock|Dockerfile|docker-compose'; then
+      docker compose up -d --build
+    else
+      docker compose restart
+    fi
+    docker image prune -f
+    docker builder prune --filter "until=72h" -f
+```
+
+关键改动：
+1. **条件 rebuild**：检测依赖文件是否变更，没变就只 restart
+2. **自动清理**：每次部署后清理 72 小时前的 Build Cache
+
+**对于 Next.js 前端项目**：
+
+前端需要编译（`next build`），挂载源码不现实，保持 `--build` 流程，但加上自动清理。
+
+### 补充 Volume 挂载
+
+两个 Python 后端项目之前没有挂载源码，补上了：
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    build: .
+    volumes:
+      - .:/app  # 新增：挂载源码
+```
+
+## 第四步：挂载闲置硬盘
+
+检查磁盘时发现服务器还有一块 931GB 的硬盘没挂载：
+
+```bash
+$ lsblk
+sda    465.8G  disk
+├─sda1   512M  part  /boot/efi
+└─sda2 465.3G  part  /
+sdb    931.5G  disk              # 未挂载！
+├─sdb1     1K  part
+└─sdb5 931.5G  part              # NTFS 格式，Windows 旧数据盘
+```
+
+### 格式化并挂载
+
+```bash
+# 格式化为 ext4
+sudo mkfs.ext4 -L data /dev/sdb5
+
+# 挂载
+sudo mkdir -p /mnt/data
+sudo mount /dev/sdb5 /mnt/data
+
+# 写入 fstab 开机自动挂载（nofail 确保磁盘异常不影响开机）
+echo 'UUID=110cea43-3dbb-4cb5-ab35-4e8193e9d187 /mnt/data ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
+
+# 刷新 systemd
+sudo systemctl daemon-reload
+```
+
+现在服务器有两块盘可用：
+
+| 磁盘 | 大小 | 挂载点 | 用途 |
+|------|------|--------|------|
+| sda | 465G | `/` | 系统盘 |
+| sdb | 931G | `/mnt/data` | 数据盘 |
+
+## 第五步：搭建 Samba 文件共享
+
+把大盘通过 Samba 共享出来，Mac 和 Windows 都能当网络硬盘用。
+
+```bash
+# 安装
+sudo apt install -y samba
+
+# 创建共享目录
+sudo mkdir -p /mnt/data/share
+sudo chown heyanxiao:heyanxiao /mnt/data/share
+
+# 设置 Samba 密码
+sudo smbpasswd -a heyanxiao
+
+# 添加共享配置
+echo -e "\n[data]\n   path = /mnt/data/share\n   browseable = yes\n   writable = yes\n   valid users = heyanxiao\n   create mask = 0644\n   directory mask = 0755" | sudo tee -a /etc/samba/smb.conf
+
+# 启动
+sudo systemctl restart smbd
+sudo systemctl enable smbd
+```
+
+访问方式：
+- **Mac**：Finder → `Cmd+K` → `smb://192.168.1.10/data`
+- **Windows**：资源管理器 → `\\192.168.1.10\data`
+
+## 第六步：Syncthing 三端文件同步
+
+Samba 是网络共享，需要手动操作。Syncthing 可以实现 **Dev 服务器 ↔ Mac ↔ Windows** 之间的自动双向实时同步。
+
+### 架构
+
+```
+Dev 服务器 (/mnt/data/sync)
+        ↕ 自动同步
+Mac (~/Sync)
+        ↕ 自动同步
+Windows (自选目录)
+```
+
+### 安装与配置
+
+**Dev 服务器**：
+
+```bash
+# 安装
+sudo apt install -y syncthing
+
+# 创建同步目录
+sudo mkdir -p /mnt/data/sync
+sudo chown heyanxiao:heyanxiao /mnt/data/sync
+
+# 注册为 systemd 服务（开机自启）
+sudo systemctl enable syncthing@heyanxiao --now
+```
+
+修改配置允许远程访问 Web UI：
+
+```bash
+sed -i 's|<address>127.0.0.1:8384</address>|<address>0.0.0.0:8384</address>|' \
+  ~/.local/state/syncthing/config.xml
+sudo systemctl restart syncthing@heyanxiao
+```
+
+**Mac**：
+
+```bash
+brew install syncthing
+brew services start syncthing
+# 访问 http://127.0.0.1:8384 配置
+```
+
+**Windows**：
+
+从 [syncthing.net](https://syncthing.net/downloads/) 下载安装包，启动后访问 `http://127.0.0.1:8384` 配置。
+
+### 配对流程
+
+1. 在 Dev 服务器 Web UI 中创建同步文件夹，路径设为 `/mnt/data/sync`
+2. Mac/Windows 的 Syncthing 中添加远程设备，输入 Dev 服务器的设备 ID
+3. Dev 服务器确认连接请求
+4. 在 Dev 服务器上将同步文件夹共享给 Mac/Windows
+5. Mac/Windows 接受共享，选择本地同步路径
+
+### 配合 Nginx 域名访问
+
+在 Nginx 配置中添加 Syncthing 的反向代理，通过 `syncthing.dev.local` 访问：
+
+```nginx
+server {
+    listen 80;
+    server_name syncthing.dev.local;
+    location / {
+        proxy_pass http://192.168.1.10:8384;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+## 第七步：PostgreSQL 备份自动同步
+
+服务器上已有 PostgreSQL 每日备份的 cron 任务：
+
+```bash
+# 每天凌晨 3 点备份
+0 3 * * * docker exec postgres pg_dumpall -U admin | gzip > ~/backups/postgresql/pg_$(date +%Y%m%d).sql.gz
+# 清理 7 天前的备份
+0 4 * * * find ~/backups/postgresql -name "pg_*.sql.gz" -mtime +7 -delete
+```
+
+通过软链接将备份目录接入 Syncthing：
+
+```bash
+ln -s ~/backups/postgresql /mnt/data/sync/pg-backup
+```
+
+这样每天的数据库备份会自动同步到 Mac 和 Windows，实现三端冗余备份，零额外维护。
+
+## 最终效果
+
+### 磁盘优化
+
+| 指标 | 优化前 | 优化后 |
+|------|--------|--------|
+| 系统盘占用 | 334G (77%) | 102G (24%) |
+| 可用存储 | 100G | 100G + 931G |
+| Build Cache | 249GB 无人清理 | 自动清理 72h 前缓存 |
+| 每次 deploy | 全量 rebuild | 智能判断，按需 rebuild |
+
+### 存储架构
+
+```
+/dev/sda2 (465G) → /                 系统盘
+/dev/sdb5 (931G) → /mnt/data         数据盘
+                    ├── share/        Samba 网络共享
+                    ├── sync/         Syncthing 三端同步
+                    │   └── pg-backup → ~/backups/postgresql
+                    └── (预留)         Docker 迁移 / MinIO / Jellyfin
+```
+
+### 文件同步
+
+```
+Dev 服务器 (/mnt/data/sync)  ←→  Mac (~/Sync)  ←→  Windows
+         ↓
+   每日 PostgreSQL 备份自动同步至三端
+```
+
+## 踩坑记录
+
+**1. 多项目同时 push 导致服务器过载**
+
+11 个项目同时 push 到 main 分支，触发所有 GitHub Actions 并发执行 `docker compose up -d --build`，CPU load 飙到 11.63（4 核机器），内存和 swap 全部吃满。教训：多项目部署必须错开时间。
+
+**2. heredoc 复制粘贴问题**
+
+终端中使用 `<<'EOF' ... EOF` 写多行内容时，复制粘贴容易在 EOF 前带上空格，导致命令挂起。解决方案：用 `echo -e` 配合 `\n` 替代 heredoc。
+
+**3. Syncthing systemd 启动失败**
+
+手动启动的 Syncthing 进程未完全退出，数据库文件被锁定，systemd 服务启动失败。需要先 `kill` 旧进程，再启动 systemd 服务。
+
+## 总结
+
+这次优化从一个磁盘告警开始，最终演变成了一次完整的服务器治理：
+
+1. **Docker 瘦身**：清理 232GB Build Cache，优化 Dockerfile 和 CI/CD 流程
+2. **磁盘扩容**：挂载闲置 931GB 硬盘，从 NTFS 格式化为 ext4
+3. **文件共享**：Samba 网络共享 + Syncthing 三端自动同步
+4. **数据安全**：PostgreSQL 备份自动同步至 Mac 和 Windows
+
+整个过程花了一个晚上，但收益是持续的——以后不用担心磁盘爆满，文件同步和数据库备份都是自动化的。
