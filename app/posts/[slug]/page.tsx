@@ -80,6 +80,20 @@ export default async function PostPage({ params }: Props) {
               <span>{post.meta.category}</span>
             </>
           )}
+          {post.meta.aiGenerated && (
+            <span style={{
+              marginLeft: "auto",
+              fontSize: 11,
+              fontWeight: 500,
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: "linear-gradient(135deg, hsl(245 100% 65% / 0.12), hsl(280 80% 60% / 0.12))",
+              color: "hsl(245 80% 60%)",
+              border: "1px solid hsl(245 100% 65% / 0.2)",
+            }}>
+              AI 对话总结生成
+            </span>
+          )}
         </div>
         {post.meta.tags.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 20 }}>

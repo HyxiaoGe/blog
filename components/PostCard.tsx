@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PostMeta } from "@/lib/posts";
 
@@ -21,6 +22,7 @@ function hashString(str: string): number {
 }
 
 export function PostCard({ post }: { post: PostMeta }) {
+  const router = useRouter();
   const gradient = gradients[hashString(post.slug) % gradients.length];
   const date = new Date(post.date).toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -29,7 +31,10 @@ export function PostCard({ post }: { post: PostMeta }) {
   });
 
   return (
-    <Link href={`/posts/${post.slug}`} className="group block">
+    <div
+      className="group block cursor-pointer"
+      onClick={() => router.push(`/posts/${post.slug}`)}
+    >
       <article className="card-hover rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
         {/* Gradient banner */}
         <div
@@ -81,6 +86,6 @@ export function PostCard({ post }: { post: PostMeta }) {
           )}
         </div>
       </article>
-    </Link>
+    </div>
   );
 }

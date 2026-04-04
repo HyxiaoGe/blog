@@ -13,6 +13,7 @@ export interface PostMeta {
   category: string;
   summary: string;
   readingTime: string;
+  aiGenerated?: boolean;
 }
 
 export function getAllPosts(): PostMeta[] {
@@ -36,6 +37,7 @@ export function getAllPosts(): PostMeta[] {
         category: data.categories || data.category || "",
         summary: data.summary || "",
         readingTime: stats.text,
+        aiGenerated: data.aiGenerated || false,
       };
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -81,6 +83,7 @@ export function getPostBySlug(slug: string): { meta: PostMeta; content: string }
       category: data.categories || data.category || "",
       summary: data.summary || "",
       readingTime: stats.text,
+      aiGenerated: data.aiGenerated || false,
     },
     content,
   };

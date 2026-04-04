@@ -173,6 +173,7 @@ body {
   margin-top: 3rem;
   margin-bottom: 1rem;
   letter-spacing: -0.02em;
+  scroll-margin-top: 5rem;
 }
 
 .prose h3 {
@@ -180,6 +181,7 @@ body {
   font-weight: 600;
   margin-top: 2.25rem;
   margin-bottom: 0.75rem;
+  scroll-margin-top: 5rem;
 }
 
 .prose p {

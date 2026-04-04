@@ -120,7 +120,11 @@ export function TableOfContents() {
                   className={`toc-link${isActive ? " active" : ""}`}
                   onClick={(e) => {
                     e.preventDefault();
-                    document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth" });
+                    const el = document.getElementById(h.id);
+                    if (el) {
+                      const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                      window.scrollTo({ top, behavior: "smooth" });
+                    }
                   }}
                   style={{
                     display: "block",
