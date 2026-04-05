@@ -1,0 +1,304 @@
+---
+title: AI Agent 是怎么工作的？——从 Claude Code 看 Agent 的思考与行动
+date: 2026-04-05 20:00:00
+tags:
+  - AI
+  - Agent
+  - Claude Code
+  - ReAct
+categories: AI
+aiGenerated: true
+summary: 你每天在用的 Claude Code 就是一个 AI Agent。它是怎么思考、规划、调用工具、一步步完成任务的？从 ReAct 框架到 Agent Loop，带你看透 AI Agent 的工作原理。
+---
+
+你可能已经用过很多 AI 工具——ChatGPT、Claude、Copilot。但你有没有注意到一个根本性的区别：
+
+- **普通 AI 聊天**：你问一个问题，它回答一段文字，结束了
+- **AI Agent**：你说"帮我写一篇博客"，它会自己思考、读文件、搜索资料、生成图片、写代码、提交 Git——**一口气做完一连串操作**
+
+你每天用的 Claude Code，就是一个典型的 AI Agent。
+
+这篇文章会带你从底层搞懂 AI Agent 到底是怎么工作的——它怎么"思考"、怎么"行动"、怎么"规划"、怎么知道什么时候该停下来。
+
+![普通 AI vs AI Agent：只能回答 vs 能思考能行动能规划](/images/ai-agent-how-it-works/agent-vs-ai.jpeg)
+
+## 1. Agent vs 普通 AI：根本区别是什么？
+
+先搞清楚一个基本概念：**不是所有 AI 都是 Agent。**
+
+| 维度 | 普通 AI（聊天模式） | AI Agent |
+|------|---------------------|----------|
+| **交互方式** | 一问一答 | 自主执行多步任务 |
+| **能力边界** | 只能生成文字 | 能读文件、写代码、调 API、执行命令 |
+| **决策能力** | 被动回答 | 主动规划、选择工具、判断何时完成 |
+| **记忆** | 仅当次对话 | 可以跨步骤保持上下文 |
+| **类比** | 一个知识渊博的顾问 | 一个能动手干活的实习生 |
+
+简单说：**普通 AI 是"嘴"，Agent 是"嘴 + 手 + 脑"。**
+
+一个真正的 Agent 需要三种核心能力：
+1. **推理（Reasoning）**：分析问题、分解任务、制定计划
+2. **行动（Acting）**：调用工具、执行操作、获取信息
+3. **观察（Observation）**：检查行动的结果，决定下一步怎么做
+
+这就引出了 Agent 领域最重要的框架——**ReAct**。
+
+## 2. ReAct 框架：思考 → 行动 → 观察
+
+![ReAct 循环：思考 → 行动 → 观察](/images/ai-agent-how-it-works/react-loop.jpeg)
+
+### 2.1 核心思想
+
+2022 年，Google 和普林斯顿大学的研究者发表了一篇论文 [《ReAct: Synergizing Reasoning and Acting in Language Models》](https://arxiv.org/abs/2210.03629)，提出了一个简洁而强大的框架：**让 AI 交替进行"思考"和"行动"**。
+
+> ReAct synergizes reasoning and acting in language models for general task solving.
+>
+> （ReAct 在语言模型中协同推理与行动，用于通用任务求解。）
+>
+> —— [ReAct 论文, arXiv](https://arxiv.org/abs/2210.03629)
+
+ReAct 的核心循环非常直觉：
+
+```
+Thought（思考）: 我需要做什么？当前情况是什么？
+Action（行动）:  调用某个工具/执行某个操作
+Observation（观察）: 行动的结果是什么？
+
+→ 基于观察，进入下一轮思考...
+
+Thought: 根据上一步的结果，我接下来该...
+Action: ...
+Observation: ...
+
+→ 循环，直到任务完成
+```
+
+这就是人类解决问题的方式——你不会一拍脑袋就给出最终答案，而是**想一步、做一步、看一下结果、再想下一步**。
+
+### 2.2 一个真实的例子
+
+你对 Claude Code 说："帮我写一个函数，计算斐波那契数列的第 n 项。"
+
+Agent 的内部过程大概是这样的：
+
+```
+Thought: 用户需要一个斐波那契函数。我应该先看看项目用的是什么语言，
+         然后写代码，最后验证一下。
+
+Action: 调用 Glob 工具，搜索项目中的源文件
+Observation: 找到 src/utils.ts，项目用的是 TypeScript
+
+Thought: 项目用 TypeScript，我应该写一个 TypeScript 函数。
+         先看看 utils.ts 里有没有类似的工具函数。
+
+Action: 调用 Read 工具，读取 src/utils.ts
+Observation: 文件里有一些数学工具函数，风格是用箭头函数 + JSDoc 注释
+
+Thought: 了解了代码风格。现在写斐波那契函数，保持一致的风格。
+
+Action: 调用 Edit 工具，在 utils.ts 中添加 fibonacci 函数
+Observation: 文件修改成功
+
+Thought: 函数写好了，但我应该验证一下是否正确。
+
+Action: 调用 Bash 工具，运行测试
+Observation: 测试通过
+
+Thought: 任务完成了，把结果告诉用户。
+→ 输出最终回答
+```
+
+注意看——Agent 不是直接就开始写代码。它先**观察环境**（查看项目语言和代码风格），然后**制定方案**，接着**执行**，最后**验证**。这个过程是动态的、自适应的。
+
+### 2.3 为什么 ReAct 比纯推理强？
+
+在 ReAct 出现之前，有两种典型的 AI 使用方式：
+
+- **纯推理（Chain-of-Thought）**：让 AI 一步步推理，但不能调用工具。遇到需要查数据的问题就卡住了
+- **纯行动（Act-only）**：让 AI 直接调用工具，但不做推理。容易乱来，调用错误的工具
+
+ReAct 的突破在于**把两者结合起来**——推理指导行动，行动的结果反馈给推理。
+
+根据论文数据，ReAct 在复杂问答任务上的成功率达到 **49%**，比纯行动模式的 **14%** 提升了 3.5 倍。
+
+## 3. Agent Loop：Claude Code 的核心引擎
+
+理解了 ReAct 框架后，来看看一个真实的 Agent——Claude Code——内部是怎么运转的。
+
+![Agent Loop 主循环：发送 → 返回 → 判断 → 执行工具或输出结果](/images/ai-agent-how-it-works/agent-loop.jpeg)
+
+### 3.1 单线程主循环
+
+> A simple, single-threaded master loop combined with disciplined tools and planning delivers controllable autonomy.
+>
+> （一个简单的单线程主循环，配合规范的工具和规划，实现可控的自主性。）
+>
+> —— [Claude Code 架构分析](https://code.claude.com/docs/en/how-claude-code-works)
+
+Claude Code 的架构哲学是**简洁至上**。它没有复杂的多 Agent 协调机制，核心就是一个循环：
+
+```
+while (任务未完成) {
+  1. 把当前状态（用户消息 + 工具结果 + 上下文）发送给 Claude
+  2. Claude 返回：文字回复 + 工具调用请求（可选）
+  3. 如果有工具调用 → 执行工具 → 把结果加入上下文 → 回到步骤 1
+  4. 如果没有工具调用 → 任务完成，输出最终回答
+}
+```
+
+**就这么简单。** 整个 Agent 的"智能"不在循环本身，而在 Claude 模型的推理能力——它决定什么时候调用工具、调用哪个工具、传什么参数、什么时候停止。
+
+### 3.2 工具系统：Agent 的"手脚"
+
+Claude Code 配备了大量的工具，大致可以分为几类：
+
+| 类别 | 工具 | 作用 |
+|------|------|------|
+| **文件操作** | Read、Write、Edit | 读取、创建、修改文件 |
+| **搜索** | Glob、Grep | 按文件名/内容搜索 |
+| **执行** | Bash | 运行 shell 命令 |
+| **网络** | WebSearch、WebFetch | 搜索和获取网页内容 |
+| **MCP 工具** | 动态加载 | 通过 MCP 协议接入的外部工具 |
+| **Agent** | Agent（子 Agent） | 派出"分身"并行处理子任务 |
+
+一个重要的设计决策：**只读操作可以并行，写入操作必须串行。** 比如同时读 5 个文件没问题，但修改文件必须一个一个来，避免冲突。这就像编辑团队可以同时审稿，但修改同一篇文章得排队。
+
+### 3.3 权限系统：安全护栏
+
+Agent 有"手脚"，就必须有"规矩"。Claude Code 的权限系统分三层：
+
+1. **信任建立**：加载项目时，根据 CLAUDE.md 等配置确定基本权限
+2. **工具级检查**：每个工具调用前检查是否被允许
+3. **用户确认**：高风险操作（如删除文件、推送代码）需要用户明确同意
+
+这就是为什么你用 Claude Code 的时候经常会看到"Allow this action?"的弹窗——**它在保护你。**
+
+## 4. 规划能力：怎么把大任务拆成小步骤？
+
+Agent 面对的往往不是简单问题，而是复杂的多步骤任务。比如"帮我重构这个模块的错误处理逻辑"——这涉及到理解现有代码、设计新方案、修改多个文件、跑测试确认。
+
+### 4.1 任务分解
+
+好的 Agent 会先把大任务**分解成可管理的子任务**，然后按优先级逐个执行。
+
+Claude Code 会在内部维护一个任务清单，类似于：
+
+```
+□ 1. 阅读现有的错误处理代码，理解当前逻辑
+□ 2. 分析哪些地方需要改进
+□ 3. 设计新的错误处理方案
+□ 4. 修改 src/api/handler.ts
+□ 5. 修改 src/utils/errors.ts
+□ 6. 更新相关的测试文件
+□ 7. 运行测试，确保没有回归问题
+```
+
+每完成一步就打上勾，这样即使中途出了意外（比如测试失败），Agent 也知道回退到哪一步重新处理。
+
+### 4.2 上下文管理
+
+Agent 在执行过程中会积累大量信息——文件内容、命令输出、中间结果。但 AI 的上下文窗口是有限的，不可能无限堆积。
+
+Claude Code 采用了多种策略来管理上下文压力：
+
+- **时间维度清理**：自动清除过早的工具输出结果
+- **对话总结**：把长对话压缩成摘要
+- **会话记忆提取**：把关键信息存入持久化记忆
+- **截断旧消息**：在上下文快满时裁剪最早的消息
+
+这就像人的工作记忆——你不会记住做过的每一个细节，但会记住关键的结论和当前的进展。
+
+![多 Agent 协作：主 Agent 派出子 Agent 并行处理](/images/ai-agent-how-it-works/multi-agent.jpeg)
+
+## 5. 多 Agent 协作：派出"分身"
+
+有时候一个 Agent 独自完成任务太慢了，或者任务天然可以并行。这时候就需要**多 Agent 协作**。
+
+Claude Code 支持一种简单但实用的多 Agent 模式：**主 Agent 可以派出子 Agent**。
+
+```
+主 Agent: "我需要同时搜索三个方向的信息"
+  → 派出子 Agent 1: 搜索 MCP 的官方文档
+  → 派出子 Agent 2: 搜索社区的使用案例
+  → 派出子 Agent 3: 搜索竞品的类似方案
+  ← 三个子 Agent 各自返回结果
+主 Agent: 综合三个结果，继续下一步
+```
+
+这种模式的好处是：
+- 主 Agent 保持简单的控制流
+- 子 Agent 各自独立工作，互不干扰
+- 结果汇总后由主 Agent 统一决策
+
+就像一个项目经理派人分头调研，最后自己做决策。
+
+## 6. 从 Agent 的视角看一次完整的博客写作
+
+来用我们自己的实际经历，从 Agent 的视角完整还原一次博客写作过程。当你说"帮我写一篇关于 MCP 的博客"时，Agent 内部发生了什么：
+
+```
+[Thought] 用户要写博客，匹配到 blog-write Skill，加载完整工作流
+
+[Thought] Step 1: 需要先搜索 MCP 的真实素材
+[Action] WebSearch("Anthropic MCP announcement 2024")
+[Observation] 找到官方公告、Wikipedia 数据、生态数据
+
+[Thought] Step 2: 整理成文章，按 Skill 中定义的格式
+[Action] Write("content/posts/mcp-model-context-protocol.mdx", 文章内容)
+[Observation] 文件创建成功
+
+[Thought] Step 3: 分析配图位置，文章有 8 个章节，
+         前半段的概念解释、中间的对比、后半段的生态和展望都需要配图
+[Action] 调用 image-service MCP 生成 5 张配图
+[Observation] 5 张图片生成成功
+
+[Thought] Step 4: 检查图片质量
+[Action] Read 每张图片，检查中文是否乱码
+[Observation] 全部清晰
+
+[Thought] Step 5: 下载图片到本地，插入文章
+[Action] Bash(curl 下载) + Edit(插入图片引用)
+[Observation] 完成
+
+[Thought] 所有步骤完成，等待用户确认后提交
+→ 输出最终回复
+```
+
+在这个过程中，Agent 用到了 **Skill**（blog-write 工作流）、**MCP**（image-service 图片生成）、**多种工具**（WebSearch、Write、Read、Bash、Edit）、**推理**（判断配图位置、检查质量）和 **规划**（按步骤执行、出错时调整）。
+
+**这就是一个 AI Agent 的全貌——不是一个简单的问答机器，而是一个能自主完成复杂任务的"数字员工"。**
+
+![Agent 的局限与挑战：幻觉累积、成本效率、安全边界、创造力上限](/images/ai-agent-how-it-works/challenges.jpeg)
+
+## 7. Agent 的局限与挑战
+
+AI Agent 虽然强大，但远非完美：
+
+### 7.1 幻觉与错误累积
+
+Agent 的每一步都基于上一步的结果。如果某一步出了错（比如误读了文件内容），错误会像滚雪球一样往后传递。这比单次问答的幻觉问题更严重，因为**错误会被"执行"，而不只是"说出来"**。
+
+### 7.2 成本与效率
+
+Agent 完成一个复杂任务，可能需要几十次甚至上百次的模型调用。每次调用都有 token 成本和延迟。相比人工操作，Agent 在简单任务上可能反而更慢更贵。
+
+### 7.3 安全边界
+
+Agent 能操作文件、执行命令、调用 API——这既是它的强大之处，也是风险所在。一个行为不当的 Agent 可能删除重要文件或泄露敏感数据。**可控性和能力之间的平衡**是 Agent 设计的核心挑战。
+
+### 7.4 复杂任务的上限
+
+目前的 Agent 在高度结构化的任务上表现出色（写代码、写文档、数据处理），但在需要**深度创造性**或**跨领域综合判断**的任务上仍有明显局限。它是一个优秀的执行者，但还不是一个独立的决策者。
+
+## 总结
+
+回顾一下 AI Agent 的核心要点：
+
+1. **是什么**：不只是聊天的 AI，而是能自主规划和执行多步骤任务的系统
+2. **核心框架**：ReAct——思考（Thought）→ 行动（Action）→ 观察（Observation）的循环
+3. **实际架构**：以 Claude Code 为例，核心就是一个简单的主循环 + 丰富的工具系统 + 权限安全护栏
+4. **规划能力**：任务分解、上下文管理、出错回退
+5. **多 Agent**：主 Agent 派出子 Agent 并行处理
+6. **局限性**：错误累积、成本效率、安全边界、创造力上限
+
+下次当你用 Claude Code 完成一个复杂任务的时候，可以想一下：在你看到的每一行输出背后，Agent 都在不停地思考、行动、观察、再思考——就像一个勤奋的实习生，一步一步地把你的想法变成现实。
