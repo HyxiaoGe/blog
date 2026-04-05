@@ -1,5 +1,7 @@
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { mdxComponents } from "@/components/MDXComponents";
 
 export async function renderMDX(source: string) {
@@ -10,7 +12,8 @@ export async function renderMDX(source: string) {
       parseFrontmatter: false,
       mdxOptions: {
         format: "md",
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, remarkMath],
+        rehypePlugins: [rehypeKatex],
       },
     },
   });

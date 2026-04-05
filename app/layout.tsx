@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ScrollButton } from "@/components/ScrollButton";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const inter = Inter({
