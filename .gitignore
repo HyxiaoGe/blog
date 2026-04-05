@@ -2,5 +2,6 @@
 out/
 node_modules/
 .DS_Store
+.env*
 *.tsbuildinfo
 next-env.d.ts
