@@ -1,0 +1,318 @@
+---
+title: Agent Skills：给 AI 写一本"入职培训手册"
+date: 2026-04-05 18:00:00
+tags:
+  - AI
+  - Agent
+  - Claude Code
+  - 开发工具
+categories: AI
+aiGenerated: true
+summary: Skills 是 AI Agent 的"入职培训手册"——用一份 SKILL.md 文件教会 AI 如何完成特定类型的任务。从原理到实战，带你搞懂怎么设计和使用 Agent Skills。
+---
+
+你有没有过这样的体验：每次让 AI 帮你做某件事，都得重新交代一遍——"用这个风格"、"按这个流程"、"注意这几个点"。说一次还好，说十次就烦了。
+
+**Agent Skills 就是来解决这个问题的。**
+
+简单说，Skill 就是一份你写给 AI 的"入职培训手册"。写一次，AI 就永远记住了——下次遇到同类任务，它会自动按你的要求来做，不用你再重复交代。
+
+这篇文章会结合真实案例，带你从零理解 Agent Skills：它是什么、怎么工作、怎么设计一个好的 Skill，以及它跟其他概念（Prompt、MCP、RAG）有什么区别。
+
+![Agent Skills：AI 的入职培训手册](/images/agent-skills-guide/cover.jpeg)
+
+## 1. Skills 到底是什么？
+
+### 1.1 一句话定义
+
+**Skill = 一份 SKILL.md 文件 + 一个文件夹**，里面包含了 AI 执行某类任务所需的全部指南和资源。
+
+> Skills are modular capabilities that extend Claude's functionality. Each Skill packages instructions, metadata, and optional resources that Claude uses automatically when relevant.
+>
+> （Skills 是扩展 Claude 功能的模块化能力包。每个 Skill 打包了指令、元数据和可选资源，当相关任务出现时 Claude 会自动使用。）
+>
+> —— [Anthropic 官方文档: Agent Skills](https://code.claude.com/docs/en/skills)
+
+就像公司里的 SOP（标准操作流程）手册一样——新员工入职，不需要老员工一遍遍口头教，看一遍手册就知道该怎么做了。
+
+### 1.2 最简单的 Skill 长什么样？
+
+```markdown
+---
+name: code-review
+description: 对代码进行审查，检查 bug、安全问题和风格一致性。
+---
+
+# 代码审查流程
+
+## 检查清单
+1. 是否有明显的 bug 或逻辑错误
+2. 是否存在安全漏洞（SQL 注入、XSS 等）
+3. 代码风格是否一致
+4. 是否有充分的错误处理
+5. 性能是否有明显问题
+
+## 输出格式
+- 按严重程度排列问题（严重 > 警告 > 建议）
+- 每个问题给出代码位置和修复建议
+```
+
+就这么简单——**YAML 头部**告诉 AI"我是谁、什么时候用我"，**Markdown 正文**告诉 AI"具体怎么做"。
+
+![渐进式加载：启动时 ~100 tokens → 匹配时加载 SKILL.md → 执行时按需加载](/images/agent-skills-guide/progressive-loading.jpeg)
+
+### 1.3 渐进式加载：不浪费一个 Token
+
+Skills 最聪明的设计之一是**渐进式加载（Progressive Disclosure）**：
+
+1. **启动时**：AI 只加载每个 Skill 的 `name` 和 `description`（大约 100 个 token）
+2. **匹配时**：当用户的任务跟某个 Skill 匹配，才加载完整的 SKILL.md 内容
+3. **执行时**：如果 Skill 引用了额外的文件（脚本、模板），按需加载
+
+这就像图书馆的目录系统——你不会把所有书搬到桌上，而是先看目录，找到需要的书再去取。这样即使你有几十个 Skill，也不会浪费 AI 的上下文窗口。
+
+## 2. 真实案例：blog-write Skill 的诞生
+
+理论说完了，来看一个真实的例子——**就是你正在看的这篇博客是怎么写出来的。**
+
+### 2.1 痛点
+
+最初我用 Claude Code 写博客的时候，每次都需要交代一大堆事情：
+
+- "文章放在 `content/posts/` 目录下"
+- "用 MDX 格式，frontmatter 要包含 title、date、tags、categories"
+- "配图用 Gemini 3 Pro 生成，手绘风格，16:9 比例"
+- "图片先放 public/images/，push 后自动上传 OSS"
+- "要搜索真实引用，不要全是纯知识输出"
+- ……
+
+每写一篇新博客，这些话就得重说一遍。
+
+### 2.2 解法：写一个 blog-write Skill
+
+于是我把这些经验沉淀成了一个 Skill：
+
+```yaml
+---
+name: blog-write
+description: 通过对话方式撰写博客文章，自动分析配图位置并生成风格一致的插图，发布到 blog 项目。
+---
+```
+
+这个 Skill 包含了 7 个步骤的完整工作流：
+
+| 步骤 | 内容 |
+|------|------|
+| Step 1 | 主题对话：与用户深入讨论某个话题 |
+| Step 2 | 整理成文章：MDX 格式，匹配现有风格 |
+| Step 2.5 | 补充真实素材：搜索引用、关键人物发言 |
+| Step 3 | 分析配图位置：哪里需要图、哪里不需要 |
+| Step 4 | 生成配图：手绘插画风格，Gemini 3 Pro |
+| Step 5 | 图片处理：push 后 GitHub Actions 自动上传 OSS |
+| Step 6-7 | 本地预览 + 提交发布 |
+
+![blog-write Skill 演进之路：从基础流程到配图检查的 5 个版本迭代](/images/agent-skills-guide/skill-evolution.jpeg)
+
+### 2.3 演进过程
+
+这个 Skill 不是一次写完的，而是**在实际使用中不断迭代**的：
+
+| 版本 | 改进内容 | 触发原因 |
+|------|---------|---------|
+| v1 | 基础流程：写文章 + 生成配图 | 初次使用 |
+| v2 | 增加手绘插画风格库 | 发现纯蓝白配色太像 PPT |
+| v3 | 增加真实素材搜索步骤 | 发现文章缺少可信度 |
+| v4 | 图片上传自动化 | 手动上传 OSS 太麻烦 |
+| v5 | 增加"避免虎头蛇尾"配图检查 | 发现配图总集中在前半段 |
+| v6 | 增加 `aiGenerated: true` 标签 | 新增 AI 生成标签功能 |
+
+**这就是 Skill 最大的价值——它是"活的"，会随着你的使用经验不断变好。**
+
+## 3. 怎么设计一个好的 Skill？
+
+### 3.1 三个核心原则
+
+**原则一：告诉 AI "为什么"，而不只是"做什么"**
+
+差的写法：
+```markdown
+图片尺寸用 1024x576
+```
+
+好的写法：
+```markdown
+图片尺寸用 1024x576，比例 16:9。因为博客文章宽度固定，16:9 的横图
+不会太高，阅读体验最好。
+```
+
+当 AI 理解了"为什么"，它就能在边界情况下做出合理判断，而不是机械执行。
+
+**原则二：提供具体的例子，而不只是抽象规则**
+
+差的写法：
+```markdown
+配图风格要好看
+```
+
+好的写法：
+```markdown
+配图使用手绘编辑插画风格：
+- 背景：米白色/奶油色，避免纯白
+- 配色：暖色为主（橙色、珊瑚色、薄荷绿）
+- 装饰：散落小图标（星星、闪电、齿轮）
+- 避免：不要写"flat design"这类导致企业PPT风格的词
+```
+
+**原则三：设计"检查点"，让 AI 能自我纠错**
+
+```markdown
+#### 质量检查
+
+生成后用 Read 工具检查每张图片：
+- 中文标注是否清晰、有无乱码
+- 不合格则调整 prompt 重新生成
+```
+
+这样 AI 不会生成一张乱码图就直接交差，它知道要自己检查。
+
+### 3.2 Skill 的文件结构
+
+一个 Skill 可以很简单（只有一个 SKILL.md），也可以包含更多资源：
+
+```
+my-skill/
+├── SKILL.md          # 核心指南（必需）
+├── prompts/          # 提示模板
+│   └── system.md
+├── templates/        # 文件模板
+│   └── component.tsx
+└── scripts/          # 辅助脚本
+    └── validate.sh
+```
+
+但**不要过度设计**——大多数 Skill 一个 SKILL.md 就够了，只有在确实需要分离的时候才加额外文件。
+
+### 3.3 好的 description 怎么写？
+
+`description` 是 AI 判断是否使用这个 Skill 的关键。它应该：
+
+- **明确说明触发条件**：什么时候用这个 Skill
+- **覆盖关键词**：用户可能用到的表述
+- **简洁有力**：一句话说清楚
+
+```yaml
+# 差的 description
+description: 处理代码相关的事情
+
+# 好的 description
+description: 对代码进行审查，检查 bug、安全问题、性能问题和风格一致性。
+  Use when the user asks to review code, a PR, or changed files.
+```
+
+双语描述（中文 + 英文触发条件）是一个实用技巧。
+
+![Prompt vs Skills vs MCP vs RAG：协作关系，不是替代](/images/agent-skills-guide/four-concepts.jpeg)
+
+## 4. Skills vs Prompt vs MCP vs RAG
+
+这四个概念经常被混淆，来理一理：
+
+| 维度 | Prompt | Skills | MCP | RAG |
+|------|--------|--------|-----|-----|
+| **本质** | 一次性的指令 | 可复用的行为指南 | 外部工具连接协议 | 动态知识检索 |
+| **类比** | 口头吩咐一件事 | 入职培训手册 | 工具箱里的工具 | 随时查阅的资料库 |
+| **持久性** | 当次对话有效 | 跨会话持久 | 跨会话持久 | 跨会话持久 |
+| **触发方式** | 用户手动输入 | 自动匹配或 /命令 | 自动发现并调用 | 自动检索匹配 |
+| **适合场景** | 临时的、一次性的任务 | 重复的、有固定流程的任务 | 需要调用外部 API 或服务 | 需要大量领域知识支撑 |
+
+用一个场景来说明区别：
+
+> 你让 AI 帮你写一篇博客。
+
+- **Prompt**："帮我写一篇关于 MCP 的博客，用中文，要有深度"——每次都得说
+- **Skill**："按照 blog-write 流程来"——自动按照预定义的风格、配图、格式完成
+- **MCP**：AI 调用 image-service 生成配图——没有 MCP，AI 没有这个能力
+- **RAG**：AI 检索 MCP 的官方文档获取最新数据——没有 RAG，AI 可能用过时信息
+
+**四者是协作关系，不是替代关系。** Skill 告诉 AI 怎么做，MCP 让 AI 有能力做，RAG 提供做事需要的知识，Prompt 是用户当次的具体需求。
+
+## 5. Skills 生态：社区在做什么？
+
+Skills 的概念提出后，社区生态正在快速增长。
+
+### 5.1 官方 Skills 仓库
+
+Anthropic 在 GitHub 上维护了一个 [官方 Skills 仓库](https://github.com/anthropics/skills)，提供了一批标准 Skill 供参考和使用。
+
+### 5.2 社区贡献
+
+社区开发者也在积极贡献各种实用的 Skill：
+
+- **代码审查**：自动检查 bug、安全漏洞、风格问题
+- **部署流程**：Docker 部署、CI/CD 配置、服务器运维
+- **文章配图**：宝玉（@dotey）开源了一个 [文章自动配图 Skill](https://github.com/JimLiu/baoyu-skills)，可以分析文章结构并生成 9 种风格的插图
+
+> "New Agent skill: Smart Article Illustrator 🎨 → Analyzes your article structure → Identifies where visuals would help readers → Generates illustrations in 9 styles"
+>
+> —— [@dotey (宝玉), X/Twitter](https://x.com/dotey/status/2012352676181270885)
+
+### 5.3 Skills Marketplace
+
+目前已经出现了 Skills 的聚合平台，比如 [SkillsMP](https://skillsmp.com/) 和 [skills.sh](https://skills.sh)，开发者可以在上面发现和分享 Skills。
+
+这个趋势很像早期的 npm 生态——当一个标准被广泛接受后，社区会自发地围绕它构建生态。
+
+## 6. 进阶技巧
+
+### 6.1 Skill 之间的协作
+
+一个 Skill 可以引用其他 Skill 或 MCP 工具。比如我们的 `blog-write` Skill：
+
+- 调用 **image-service MCP** 生成配图
+- 使用 **WebSearch** 搜索真实引用
+- 生成的文章会触发 **GitHub Actions** 自动处理图片
+
+这种组合让单个 Skill 能完成非常复杂的端到端工作流。
+
+### 6.2 从 Workflow 到 Skill
+
+如果你有一个经常执行的工作流程（比如每次发版都要跑一串命令），可以用这个五步框架把它转化为 Skill：
+
+1. **记录**：把你手动操作的步骤一一列出
+2. **抽象**：找出哪些是固定的、哪些是变化的
+3. **编写**：固定部分写入 SKILL.md，变化部分用参数化描述
+4. **测试**：实际跑几次，看 AI 是否理解并正确执行
+5. **迭代**：根据实际效果持续调整
+
+> 你可能不再需要 workflow，大部分场景 skills 足矣。
+>
+> —— [宝玉, "五步框架把 Workflow 变成可进化的 Skill"](https://baoyu.io/blog/2026/01/10/agent-skills-replace-workflow)
+
+### 6.3 /create-skill：让 AI 帮你写 Skill
+
+如果你用 Claude Code，可以直接在对话中输入 `/create-skill`，描述你想要的 Skill，AI 会帮你生成 SKILL.md 文件。
+
+这是一种"用 AI 训练 AI"的方式——你用自然语言描述需求，AI 帮你把它结构化成一个可复用的 Skill。
+
+![Skills 的未来：标准化、组合化、市场化、智能化](/images/agent-skills-guide/future.jpeg)
+
+## 7. Skills 的未来
+
+Skills 目前还处于早期阶段，但已经能看到几个明确的发展方向：
+
+- **标准化**：跨 Agent 平台的 Skill 格式统一，一个 Skill 能在 Claude Code、Cursor、Copilot 等多个平台上使用
+- **组合化**：Skill 之间的依赖和组合更加灵活，形成更复杂的工作流
+- **市场化**：Skill 的分发和发现机制成熟，开发者可以发布、分享、甚至销售自己的 Skill
+- **智能化**：AI 基于使用反馈自动优化 Skill 的内容，形成持续学习的循环
+
+## 总结
+
+回顾一下 Agent Skills 的核心要点：
+
+1. **是什么**：一份 SKILL.md 文件，教 AI 如何完成特定类型的任务——就像入职培训手册
+2. **怎么工作**：渐进式加载——启动时只看标题，匹配时才读内容，执行时按需加载资源
+3. **怎么设计**：告诉 AI"为什么"而不只是"做什么"，提供具体例子，设计检查点
+4. **跟其他概念的关系**：Skill 是方法论，MCP 是执行能力，RAG 是知识库，Prompt 是当次需求
+5. **实战经验**：Skill 是"活的"，需要在使用中不断迭代优化
+
+如果你还在每次跟 AI 对话时重复同样的交代，那是时候把它写成一个 Skill 了。**写一次，受益终身。**
