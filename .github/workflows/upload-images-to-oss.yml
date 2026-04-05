@@ -46,5 +46,6 @@ jobs:
             echo "No MDX files were updated."
           else
             git commit -m "chore: replace local image refs with OSS URLs"
+            git pull --rebase
             git push
           fi
