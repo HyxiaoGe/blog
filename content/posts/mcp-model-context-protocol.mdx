@@ -25,7 +25,7 @@ summary: 从充电线乱象到 USB-C 统一，MCP（Model Context Protocol）正
 >
 > —— [Anthropic 官方公告, 2024年11月25日](https://www.anthropic.com/news/model-context-protocol)
 
-![MCP：AI 的 USB-C，Before vs After 对比](/images/mcp-model-context-protocol/usb-c-analogy.jpeg)
+![MCP：AI 的 USB-C，Before vs After 对比](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/mcp-model-context-protocol/usb-c-analogy.jpeg)
 
 ## 1. 为什么需要 MCP？
 
@@ -58,7 +58,7 @@ MCP 的解法是：**在中间加一层标准协议**。
 
 ## 2. MCP 是怎么工作的？
 
-![MCP 三层架构：Host → Client → Server](/images/mcp-model-context-protocol/architecture.jpeg)
+![MCP 三层架构：Host → Client → Server](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/mcp-model-context-protocol/architecture.jpeg)
 
 ### 2.1 三个核心角色
 
@@ -104,7 +104,7 @@ Server 作为一个本地进程运行，通过 stdin/stdout 和 Client 通信。
 **Streamable HTTP**
 Server 作为一个 HTTP 服务运行，Client 通过 HTTP 请求通信。适合远程服务，可以部署在服务器上供多个 Client 共享。比如一个部署在云端的图片生成服务。
 
-![Function Calling vs MCP：单平台绑定 vs 跨平台标准](/images/mcp-model-context-protocol/fc-vs-mcp.jpeg)
+![Function Calling vs MCP：单平台绑定 vs 跨平台标准](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/mcp-model-context-protocol/fc-vs-mcp.jpeg)
 
 ## 3. MCP vs Function Calling：有什么区别？
 
@@ -125,7 +125,7 @@ Server 作为一个 HTTP 服务运行，Client 通过 HTTP 请求通信。适合
 
 Function Calling 就像你在餐厅点菜时跟服务员说"我要宫保鸡丁"——这是一次性的交互。MCP 则像是定义了整个餐厅的服务规范——菜单怎么展示、怎么下单、怎么上菜、怎么结账，而且这套规范任何餐厅都能用。
 
-![MCP 生态爆发：5800+ Servers，巨头入场](/images/mcp-model-context-protocol/ecosystem.jpeg)
+![MCP 生态爆发：5800+ Servers，巨头入场](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/mcp-model-context-protocol/ecosystem.jpeg)
 
 ## 4. MCP 生态现状
 
@@ -257,7 +257,7 @@ await server.connect(transport);
 
 ## 6. MCP vs Skills：别搞混了
 
-![MCP vs Skills：执行能力 vs 知识经验](/images/mcp-model-context-protocol/mcp-vs-skills.jpeg)
+![MCP vs Skills：执行能力 vs 知识经验](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/mcp-model-context-protocol/mcp-vs-skills.jpeg)
 
 如果你用过 Claude Code，可能会注意到它除了 MCP，还有一个叫 **Skills** 的概念。两者很容易混淆，但其实完全不同：
 
