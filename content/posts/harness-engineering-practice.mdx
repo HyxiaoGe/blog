@@ -1,0 +1,339 @@
+---
+title: Harness Engineering 实战：给 AI 编码代理装上缰绳系统
+date: 2026-04-12 22:00:00
+tags:
+  - AI
+  - Harness Engineering
+  - Claude Code
+  - Superpowers
+  - 工程实践
+categories: AI
+aiGenerated: true
+summary: 当 AI 代理写代码的速度远超人类审查速度时，你需要的不是更好的 prompt，而是一套完整的缰绳系统。本文记录了在真实全栈项目中落地 Harness Engineering 的完整过程——从引入 Ruff、重构 CLAUDE.md、到架构约束脚本和 CI 门禁，最终用 Superpowers 补全工作流层。
+---
+
+2026 年初，一个新的工程学科正在席卷整个 AI 编码社区。Martin Fowler 在 ThoughtWorks 发表了他的备忘录，OpenAI 公布了用 Codex 代理在五个月内产出百万行代码的内部实验，Anthropic 分享了长时间运行代理的 harness 设计经验。
+
+这个学科叫做 **Harness Engineering**——线束工程，或者更直觉地说，**给 AI 代理装缰绳**。
+
+> The collection of specifications, quality checks, and workflow guidance that control different levels of loops inside the "how loop" is the agent's harness, and the emerging practice of building and maintaining these harnesses is called Harness Engineering.
+>
+> （控制代理"如何执行"循环各层级的规范、质量检查和工作流引导，就是代理的 harness，构建和维护这些 harness 的新兴实践被称为 Harness Engineering。）
+>
+> —— [Martin Fowler, Harness engineering for coding agent users](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
+
+这篇文章不是概念科普，而是一次**完整的实战记录**——我在自己的全栈 AI 对话平台 Fusion 中，从零开始落地 Harness Engineering 的全过程。
+
+![Harness Engineering：给 AI 编码代理装上缰绳系统](/images/harness-engineering-practice/cover.jpeg)
+
+## 1. 为什么需要 Harness？
+
+先看一个公式：
+
+**Agent = Model + Harness**
+
+模型是马，Harness 是缰绳系统。马跑得快、有力气、不知疲倦——但它也不知疲倦地**制造熵**。命名漂移、重复函数、架构违反、未经测试的代码——这些问题在 AI 代理的高吞吐量下会以人类无法审查的速度累积。
+
+OpenAI 用一个真实案例验证了这一点：
+
+> 3 名工程师用 Codex 代理在 5 个月内产出约 100 万行代码，通过约 1,500 个 PR 管理，平均每人每天 3.5 个 PR。他们估计这比手写代码快了约 10 倍。
+>
+> —— [OpenAI, Harness engineering: leveraging Codex in an agent-first world](https://openai.com/index/harness-engineering/)
+
+但他们也发现了一个关键教训：
+
+> Give Codex a map, not a 1,000-page instruction manual.
+>
+> （给 Codex 一张地图，而不是一本千页手册。）
+
+上下文是稀缺资源。当所有内容都被标记为"重要"时，等于什么都不重要。这直接影响了我后面对 CLAUDE.md 的重构决策。
+
+## 2. Fusion 项目的起点
+
+Fusion 是一个全栈 AI 对话平台——后端 FastAPI + PostgreSQL + Redis，前端 Next.js + React + Electron，统一接入 10 个 LLM 提供商。日常开发模式是我 + Claude Code 的一人组合。
+
+在引入 Harness 之前，项目的状况是：
+
+| 维度 | 状态 |
+|------|------|
+| 代码风格 | 无任何 lint/format 工具，55 个 Python 文件裸奔 |
+| 上下文文档 | CLAUDE.md 324 行，什么都往里塞 |
+| 架构约束 | 全靠口头约定，已有违规未发现 |
+| CI/CD | 只有部署，没有检查门禁 |
+| 工作流 | 无标准流程，经常改完就推 |
+
+简单说：**马跑得很快，但没有缰绳。**
+
+## 3. 四层 Harness 模型
+
+参考 Martin Fowler 和 OpenAI 的实践，Harness 体系可以分为四层：
+
+| 层 | 目标 | 类比 |
+|---|------|------|
+| **Context Engineering** | 给代理一张地图 | 缰绳的方向盘 |
+| **Arch Constraints** | 用 linter 强制执行规则 | 围栏 |
+| **Feedback Loop** | 每次犯错转化为基础设施改进 | 训练记录 |
+| **Garbage Collection** | 自动对抗熵增 | 马厩清扫 |
+
+但对于一个一人 + 一 AI 的项目，全做是过度工程化。我砍掉了第四层的重型扫描（等项目规模翻倍再加），把反馈循环融入了已有的 memory 系统，最终精简为**两周计划**。
+
+![四层 Harness 模型：从上下文到自动清扫](/images/harness-engineering-practice/harness-layers.jpeg)
+
+## 4. 第零步：引入 Ruff
+
+在搭 Harness 之前，先解决最基本的代码质量问题。
+
+Ruff 是 2024-2025 年最火的 Python 工具之一——用 Rust 写的超快 linter + formatter，一个工具替代 flake8 + isort + pyflakes + black。对于一个完全没有代码检查的项目来说，这是投入产出比最高的第一步。
+
+```toml
+# pyproject.toml
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501", "E712"]  # 行长交给 formatter，== True 是 SQLAlchemy 必须的
+```
+
+一次 `ruff check --fix` + `ruff format`，修复了 174 个 lint 问题，格式化了 44 个文件。**10 分钟，55 个文件从裸奔变成有标准。**
+
+## 5. 第一层：Context Engineering
+
+### 5.1 问题：CLAUDE.md 是百科全书
+
+我的 `fusion-api/CLAUDE.md` 有 324 行，从语言规范、提交规范、架构概览、API 端点、数据库模型到部署配置，全都塞在一个文件里。
+
+这正是 OpenAI 踩过的坑——上下文过载。当 CLAUDE.md 变成一本百科全书时，AI 代理无法分辨什么是关键约束、什么是参考信息。
+
+### 5.2 方案：地图 + 分册
+
+把 CLAUDE.md 精简为索引（≤100 行），详细内容拆分到 `docs/` 目录：
+
+```
+fusion-api/
+├── CLAUDE.md                    # 51 行，只做导航
+├── docs/
+│   ├── ARCHITECTURE.md          # 分层架构、数据流、数据库模型
+│   ├── ARCHITECTURE_RULES.md    # 架构约束（"不能做什么"）
+│   ├── CODING_CONVENTIONS.md    # 编码规范
+│   ├── API_REFERENCE.md         # API 端点一览
+│   └── DEVELOPMENT_GUIDE.md     # 开发任务指南
+```
+
+精简后的 CLAUDE.md 长这样：
+
+```markdown
+## 架构速览
+四层架构，依赖只能向下：API → Service → AI → Data
+核心设计：Redis Stream 两段式流。详见 → docs/ARCHITECTURE.md
+
+## 工作流程
+1. 变更前：超过 3 个文件的改动，先输出影响分析
+2. 编码中：遵守 docs/ARCHITECTURE_RULES.md
+3. 变更后：运行测试 + ruff 检查
+4. 提交前：确认改动已 push 且部署通过
+```
+
+**324 行 → 51 行。** 代理启动时加载的上下文从一本书变成了一张地图，需要深入时按需查阅 `docs/`。
+
+## 6. 第二层：Arch Constraints
+
+### 6.1 如果一条规则值得写进文档，就值得用脚本强制执行
+
+Fusion 后端的分层架构是：API → Service → AI → Data，依赖只能向下。这是最核心的约束——但在引入自动检查之前，我甚至不知道它已经被违反了。
+
+我写了一个 AST 分析脚本 `scripts/check_architecture.py`，用 Python 的 `ast` 模块解析每个文件的 import 语句，检查是否违反分层规则：
+
+```python
+# 分层依赖规则
+LAYER_RULES = {
+    "app/db": [
+        ("app.services", "数据层禁止 import 服务层"),
+        ("app.api", "数据层禁止 import API 层"),
+        ("app.ai", "数据层禁止 import AI 层"),
+    ],
+    "app/ai": [
+        ("app.services", "AI 层禁止 import 服务层"),
+        ("app.api", "AI 层禁止 import API 层"),
+    ],
+    # ...
+}
+```
+
+### 6.2 第一次运行就抓到了真实违规
+
+```
+❌ 分层依赖违规：
+  app/db/repositories.py:618 — 数据层禁止 import AI 层（import app.ai.llm_manager）
+```
+
+`repositories.py` 反向依赖了 AI 层的 `get_model_display_name` 函数——一个纯数据映射函数被放在了错误的层。修复很简单：把它下沉到 `app/constants/providers.py`。
+
+**脚本发现了人眼漏掉的问题。** 这就是 Harness 的价值——不是靠文档"告知"，而是靠脚本"机械化检验"。
+
+### 6.3 集成到 CI
+
+把架构检查和 Ruff lint 集成到 GitHub Actions 的 deploy workflow，部署前先过检查门禁：
+
+```yaml
+jobs:
+  check:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 ruff
+        run: curl -LsSf https://astral.sh/ruff/install.sh | sh
+      - name: 架构检查
+        run: python3 scripts/check_architecture.py
+      - name: Lint 检查
+        run: ruff check .
+  deploy:
+    needs: check  # 检查不过，不部署
+    # ...
+```
+
+从此，任何分层违规或 lint 问题都会阻断部署。**Harness 的基础设施层搭完了。**
+
+![CI 门禁：架构检查 + Ruff Lint → 通过才能部署](/images/harness-engineering-practice/ci-pipeline.jpeg)
+
+## 7. 工作流层：Superpowers
+
+基础设施解决了"不能做什么"的问题，但还缺一块——"应该怎么做"。
+
+[Superpowers](https://github.com/obra/superpowers) 是目前最火的 AI 编码代理技能框架，由 Jesse Vincent 创建，GitHub 上超过 14.4 万 Star。它的核心理念是：**让 AI 代理不要上来就写代码，而是遵循一套系统化的软件开发流程。**
+
+### 7.1 为什么不自己写规则？
+
+我最初打算把 Superpowers 的核心规则手动提取到 CLAUDE.md 里。但深入阅读每个技能的定义后发现，这些技能经过了大量的边界处理和"反合理化"设计——比如 systematic-debugging 技能里有一张"红旗思维"清单，堵住 AI 自我说服走捷径的每条路径。
+
+这种精细度不是手写几行规则能复现的。所以最终选择了直接安装：
+
+```bash
+claude plugin install superpowers  # v5.0.7
+```
+
+### 7.2 六个核心技能
+
+安装后，以下技能会根据场景自动触发：
+
+| 技能 | 触发场景 | 核心规则 |
+|------|---------|---------|
+| **brainstorming** | 任何功能开发前 | 苏格拉底式提问，分段确认，不一口气甩方案 |
+| **writing-plans** | 设计通过后 | 零占位符，每步精确到文件路径和完整代码 |
+| **test-driven-development** | 编码时 | 强制 RED-GREEN-REFACTOR，先写失败测试 |
+| **systematic-debugging** | 遇到 bug 时 | 根因优先，3 次失败就停下来问人 |
+| **verification-before-completion** | 声称完成前 | 必须跑命令确认，禁止说"应该可以了" |
+| **requesting-code-review** | 任务完成后 | 两阶段自审（规范合规 + 代码质量） |
+
+### 7.3 优先级设计
+
+Superpowers 有一个关键的优先级规则：
+
+**用户 CLAUDE.md > Superpowers 技能 > 系统默认**
+
+这意味着我在 CLAUDE.md 里定义的项目特有约束（架构检查、Ruff lint、CI 门禁）优先级最高。Superpowers 是通用的工作流框架，CLAUDE.md 是项目的特化约束，两者互补而不冲突。
+
+## 8. 第一次实战：统一 API 响应结构
+
+Harness 搭完当天，我就用它做了第一个真实需求——为 Fusion 的所有 REST 接口引入统一的响应包装结构。
+
+整个过程完美展现了 Harness + Superpowers 的协作：
+
+**brainstorming 阶段**：AI 自动探索现有 API 结构，逐个问题澄清需求（code 字段用什么风格？SSE 接口要不要包装？），提出 3 种方案对比，最终确认方案 B（显式模型包装 + 工具函数）。
+
+**writing-plans 阶段**：生成了 1817 行的实施计划，10 个 Task，每步都有完整的测试代码和实现代码，零占位符。
+
+**执行阶段**：subagent-driven-development 接管，每个 Task 派一个独立子代理执行，Task 间有两阶段审查。前后端 20+ 个接口全部改造完成。
+
+**验证阶段**：verification-before-completion 强制跑完所有检查——pytest、ruff、架构检查、dev 服务器 curl 验证。
+
+最终结果：
+
+```json
+{
+  "code": "SUCCESS",
+  "message": "ok",
+  "data": { "models": [...], "providers": [...] },
+  "request_id": "req_6b6e681e0493"
+}
+```
+
+**从需求到全链路上线，Superpowers 的七阶段流程跑了个完整循环。**
+
+![Superpowers 工作流：从头脑风暴到验证上线](/images/harness-engineering-practice/superpowers-workflow.jpeg)
+
+## 9. 关于 Memory 的清理
+
+一个容易忽视的问题：**反馈循环也会制造熵。**
+
+Claude Code 的 memory 系统会随着使用不断累积记忆条目。当我审视自己的 memory 文件时，发现了几类问题：
+
+- **重复**：两条 memory 说的是同一件事
+- **过时**：内容写"待实现"但实际已完成
+- **过度详细**：存了大量文件路径和踩坑记录，这些从代码和 git 历史能查到
+
+特别是安装 Superpowers 后，部分 feedback 类型的 memory 被技能覆盖了（比如"先诊断再改代码"被 systematic-debugging 技能接管）。我把这些更新为"基础流程由 Superpowers 接管 + 项目补充"的格式，避免重复约束。
+
+**Memory 不是只加不删的日志，而是需要定期维护的索引。**
+
+## 10. 最终架构
+
+经过两天的集成，Fusion 项目的 Harness 体系长这样：
+
+| 层 | 组件 | 职责 |
+|---|------|------|
+| **基础设施** | Ruff | 代码风格统一 + lint |
+| **上下文** | CLAUDE.md（索引） + docs/ | 给代理一张地图 |
+| **架构约束** | check_architecture.py | AST 分层依赖检查 |
+| **CI 门禁** | GitHub Actions | 架构检查 + Ruff → 不过不部署 |
+| **工作流** | Superpowers 6 个技能 | 设计/计划/TDD/调试/审查/验证 |
+| **反馈** | Memory 系统 | 项目特有的补充约束 |
+| **预留** | 扩展触发条件 | Python >80 文件时引入 entropy 扫描 |
+
+```
+用户提出需求
+    │
+    ▼
+ brainstorming（设计探索）
+    │
+    ▼
+ writing-plans（零占位符计划）
+    │
+    ▼
+ test-driven-development（RED-GREEN-REFACTOR）
+    │  每个 Task 完成后 ↓
+    ▼
+ requesting-code-review（两阶段自审）
+    │
+    ▼
+ verification-before-completion（跑命令确认）
+    │
+    ▼
+ CI 门禁（架构检查 + Ruff lint）
+    │
+    ▼
+ 部署上线
+```
+
+## 11. 写在最后
+
+Harness Engineering 不是一个"搭完就完"的东西。今天搭的是骨架——CI 能拦住架构违规了，CLAUDE.md 不再是噪音了，Superpowers 让工作流有了标准。
+
+但真正的价值在飞轮转起来之后：
+
+- AI 代理写出分层违规的代码 → CI 拦住 → **Harness 在工作**
+- 用户纠正一个错误 → 沉淀到 memory → **反馈循环在转**
+- 第一个完整需求走完七阶段流程 → 全链路上线 → **工作流跑通了**
+
+Anthropic 在他们的 harness 设计文章中说：
+
+> As AI agents become more capable, developers are increasingly asking them to take on complex tasks requiring work that spans hours, or even days. However, getting agents to make consistent progress across multiple context windows remains an open problem.
+>
+> （随着 AI 代理能力增强，开发者越来越多地让它们承担跨越数小时甚至数天的复杂任务。然而，让代理在多个上下文窗口中保持一致进展仍是一个开放问题。）
+>
+> —— [Anthropic, Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+
+解决这个问题的答案不是更好的模型，而是更好的缰绳系统。
+
+**骨架就绪，飞轮刚开始转。**
