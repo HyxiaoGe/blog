@@ -1,0 +1,558 @@
+---
+title: 把构建从 Dev 服务器搬到 Windows：一次家庭实验室 CI/CD 架构升级
+date: 2026-05-02 22:00:00
+tags:
+  - Docker
+  - DevOps
+  - CI/CD
+  - GitHub Actions
+  - Grafana
+categories: DevOps
+aiGenerated: true
+summary: 这次改造把闲置 Windows 主机变成 GitHub Actions 构建节点，引入 GHCR 作为镜像中转，让 Dev 服务器从“构建 + 部署 + 运行”回归到“只运行服务”。文章记录了从前端 preview 到后端 master 部署、从镜像清理到 Grafana 通用 CI/CD Dashboard 的完整落地过程。
+---
+
+家里的 Dev 服务器已经跑了一段时间。它很方便：代码 push 到 GitHub，Self-hosted Runner 在服务器上拉代码、构建镜像、`docker compose up -d`，服务自动更新。
+
+但这个模式也有一个很直接的问题：**Dev 服务器既是运行环境，又是构建环境**。它要跑 PostgreSQL、Redis、MinIO、Grafana、Prometheus，还要同时承担前端 `next build`、后端依赖安装、Docker build、镜像清理。平时项目少的时候没问题，服务一多，构建缓存、CPU、IO 压力都会慢慢堆到同一台机器上。
+
+这次 Fusion 前端做 Design System v2 改造，刚好触发了一次比较完整的 CI/CD 升级：把一台闲置 Windows 主机接进来，专门负责构建；Dev 服务器只负责拉镜像、重启容器和健康检查。
+
+![Windows 接管构建，Dev 回归运行](/images/windows-runner-cicd-upgrade/cover.jpeg)
+
+最终链路变成：
+
+```text
+Git push
+  → GitHub Actions
+  → Windows self-hosted runner 构建 Docker image
+  → push 到 GHCR
+  → Dev 服务器 pull image
+  → docker compose up -d
+  → health check
+  → Pushgateway / Prometheus / Grafana
+```
+
+这篇文章记录整个过程，包括中间踩到的坑：Windows Runner 服务账号、Docker Desktop 权限、GitHub Actions runner 的仓库作用域、`docker image prune` 的清理边界、以及 Grafana 变量里一个很隐蔽的 PromQL 转义问题。
+
+## 原来的问题：Dev 服务器什么都干
+
+之前的部署方式很直接。以传统前端服务为例：
+
+```yaml
+on:
+  push:
+    branches: ["master"]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and deploy
+        run: |
+          cd ~/project/fusion
+          docker compose up -d --build fusion-ui
+```
+
+这种方案的优点是简单，不需要外部 registry，也不需要 SSH。Runner 就在 Dev 服务器上，workflow 直接执行命令。
+
+但缺点也明显：
+
+| 问题 | 影响 |
+|------|------|
+| 构建和运行混在一台机器 | 前端 build 或后端 pip install 会抢业务服务资源 |
+| Docker build cache 全在 Dev 上增长 | 之前已经因为 Build Cache 做过一次磁盘大扫除 |
+| 多服务同时部署容易叠加压力 | CPU、IO、内存、网络都在同一台机器打满 |
+| 回滚粒度不清晰 | 本地 build 出来的 image tag 不如 SHA 镜像清楚 |
+| 监控只看到部署结果 | 看不出慢在 build、push 还是 deploy |
+
+这不是“不能用”的问题，而是职责边界不清。Dev 服务器应该更像运行环境，而不是构建农场。
+
+## 新目标：构建和运行分离
+
+新的目标很明确：
+
+```text
+Windows build Docker image
+Windows push image 到 GHCR
+Dev pull image
+Dev docker compose up -d
+```
+
+![从一台机器扛所有事，到构建与运行分离](/images/windows-runner-cicd-upgrade/old-vs-new-pipeline.jpeg)
+
+这里有几个关键判断。
+
+**第一，为什么选 Windows？**
+
+因为手头刚好有一台闲置 Windows 主机，资源足够，能长期在线，也能访问 GitHub。它不适合跑生产服务，但很适合做构建节点。Docker Desktop 已经安装，配好 GitHub Actions Runner 后，就能接管前后端 Docker build。
+
+**第二，为什么引入 GHCR？**
+
+如果构建发生在 Windows，部署发生在 Dev，二者之间必须有一个镜像中转点。GitHub Container Registry（GHCR）和 GitHub Actions 权限天然集成，workflow 里用 `GITHUB_TOKEN` 就能 push：
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+```
+
+镜像 tag 使用 commit SHA：
+
+```text
+ghcr.io/hyxiaoge/fusion-ui:<github.sha>
+ghcr.io/hyxiaoge/fusion-api:<github.sha>
+```
+
+这样 Dev 服务器部署的是哪个版本，一眼能对上 Git commit。
+
+**第三，Dev 服务器还做什么？**
+
+只做运行态工作：
+
+- 登录 GHCR
+- `docker pull`
+- 写入或更新 compose override 文件
+- `docker compose up -d`
+- 健康检查
+- 清理自己服务的旧镜像
+- 上报 CI/CD metrics
+
+不再 `git pull`，不再 `npm ci`，不再 `pip install`，不再 `docker build`。
+
+## Windows Runner：第一个坑在服务账号
+
+GitHub 的 self-hosted runner 是按仓库注册的。也就是说，给 `fusion-ui` 注册的 Windows Runner，不能自动给 `fusion-api` 用。最后我给两个仓库各注册了一个 runner：
+
+| 仓库 | Runner | 目录 |
+|------|--------|------|
+| fusion-ui | `windows-build-01` | `D:\actions-runner` |
+| fusion-api | `windows-build-api-01` | `D:\actions-runner\fusion-api` |
+
+后续更理想的目录结构是：
+
+```text
+D:\actions-runner\
+  fusion-ui\
+  fusion-api\
+  reader-service\
+```
+
+但前端 runner 一开始已经装在根目录，为了避免再次折腾 Windows Service 的路径和权限，我先保留现状，只把后端新增到子目录。
+
+注册 runner 时有一个交互问题：
+
+```text
+Would you like to run the runner as service? (Y/N)
+```
+
+如果选择 `Y`，Runner 会作为 Windows Service 常驻后台，PowerShell 窗口可以关闭。这是长期在线构建机应该选择的方式。
+
+但服务账号要小心。默认的 `NT AUTHORITY\NETWORK SERVICE` 不一定能访问 Docker Desktop。最后我把服务切到一个能访问 Docker Desktop 的本地 Windows 用户，并把该用户加入 `docker-users` 组。
+
+这个点很关键：**Runner 在线不代表能执行 Docker build**。真正要验证的是：
+
+```powershell
+docker version
+docker ps
+```
+
+这两个命令在 workflow 里通过，才说明 Runner 的服务账号有 Docker 权限。
+
+## 前端迁移：feature 分支也能独立预览
+
+前端这次的直接触发点是 `feat/design-system-v2` 分支。它不是 master，但需要部署一个独立预览环境，方便验证 Design System v2 的视觉效果。
+
+前端 workflow 被拆成两个阶段：
+
+1. Windows Runner build
+2. Dev Server deploy
+
+核心 build job：
+
+```yaml
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    env:
+      IMAGE_NAME: ghcr.io/hyxiaoge/fusion-ui
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --cache "%RUNNER_TEMP%\npm-cache"
+
+      - name: Build
+        run: npm run build
+
+      - name: Test non-blocking while Vitest baseline is being cleaned up
+        continue-on-error: true
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build -t "%IMAGE_NAME%:%GITHUB_SHA%" .
+
+      - name: Push Docker image
+        run: docker push "%IMAGE_NAME%:%GITHUB_SHA%"
+```
+
+这里 `npm test` 暂时是 non-blocking。原因不是测试不重要，而是当前前端有一批已知 Vitest mock 问题，基线还没清理干净。如果现在强行把它作为部署门禁，会先把这次 CI/CD 迁移卡死。
+
+部署 preview 时，只在 `feat/design-system-v2` 分支触发：
+
+```yaml
+deploy-preview:
+  if: github.ref == 'refs/heads/feat/design-system-v2'
+  needs: build
+  runs-on: [self-hosted, Linux, X64]
+```
+
+Dev 服务器上启动一个独立容器：
+
+```yaml
+services:
+  fusion-ui-design-system-v2:
+    image: ghcr.io/hyxiaoge/fusion-ui:${{ github.sha }}
+    container_name: fusion-ui-design-system-v2
+    ports:
+      - "3005:3000"
+```
+
+这样 master 的 `fusion-ui` 仍然在 `3004`，feature 预览在 `3005`，两边互不影响。
+
+## 后端迁移：不要把密钥 baked into image
+
+后端迁移比前端更需要谨慎。前端的 `NEXT_PUBLIC_*` 是公开构建变量，可以作为 build args 进入镜像；后端的数据库、Redis、JWT、LLM API Key 都不能 baked into image。
+
+后端镜像只包含代码和依赖，运行时配置继续来自 Dev 服务器的环境变量：
+
+```yaml
+services:
+  fusion-api:
+    image: ghcr.io/hyxiaoge/fusion-api:${{ github.sha }}
+    container_name: fusion-api
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://middleware-redis:6379/0}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm-proxy:4000}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-}
+      - ENABLE_DOCS=false
+```
+
+后端 build job 我没有使用宿主机 Python，而是直接在 Docker image 内跑检查：
+
+```yaml
+- name: Build Docker image
+  run: docker build -t "%IMAGE_NAME%:%GITHUB_SHA%" .
+
+- name: Architecture check in image
+  run: docker run --rm "%IMAGE_NAME%:%GITHUB_SHA%" python scripts/check_architecture.py
+
+- name: Lint in image
+  run: docker run --rm "%IMAGE_NAME%:%GITHUB_SHA%" sh -lc "pip install --no-cache-dir ruff && ruff check ."
+```
+
+这是一个临时但有效的选择。第一次尝试用 `actions/setup-python` 时，Windows 上遇到了两个问题：
+
+- 机器没有 `pwsh`
+- PowerShell execution policy 阻止了 `setup.ps1`
+
+与其继续改 Windows 策略，不如让检查直接跑在最终镜像里。这样环境和生产容器更一致，也减少了宿主机依赖。
+
+部署后端时加了 `/health` 检查：
+
+```yaml
+- name: Verify health
+  run: |
+    for attempt in $(seq 1 30); do
+      if curl -fsS http://127.0.0.1:8002/health | grep -q '"status":"healthy"'; then
+        exit 0
+      fi
+      sleep 2
+    done
+
+    docker logs --tail=120 fusion-api || true
+    exit 1
+```
+
+这个 health endpoint 会检查数据库连接。最终部署成功后返回：
+
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "service": "fusion-api",
+  "version": "0.1.1"
+}
+```
+
+## 清理策略：不要在共享机器上全局 prune
+
+这次有一个很值得记录的小插曲。
+
+一开始我在部署后加了：
+
+```bash
+docker image prune -f
+```
+
+它默认只会删除 dangling image，不会删有 tag 或正在被容器使用的镜像。听起来安全，但它仍然是 **Docker daemon 全局操作**。在一台共享 Dev 服务器上，任何全局清理都应该谨慎。
+
+更合理的做法是只清理自己服务相关的镜像：
+
+```bash
+current="ghcr.io/hyxiaoge/fusion-ui:${{ github.sha }}"
+docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' ghcr.io/hyxiaoge/fusion-ui \
+  | awk -v current="$current" '$1 != current {print $2}' \
+  | sort -u \
+  | xargs -r docker rmi || true
+```
+
+后端同理，只匹配：
+
+```text
+ghcr.io/hyxiaoge/fusion-api
+```
+
+Windows 构建机上保留：
+
+```bash
+docker builder prune --filter "until=72h" -f
+```
+
+因为 Windows 现在是专用构建机，清理的是 build cache，不是 Dev 上的业务镜像。Dev 服务器上则尽量只做服务相关清理。
+
+这条原则可以总结为：
+
+> 构建机可以清构建缓存，运行机只清自己的服务资产。
+
+## 通用监控：不要给每个服务做一个 Dashboard
+
+迁移完前后端后，很自然会想到 Grafana 监控。最开始的想法是给 `fusion-ui` 和 `fusion-api` 做面板。但这个方向很快暴露问题：如果后面再加 `reader-service`、`image-service`、其他项目，难道每个服务都加一个 dashboard？
+
+更合理的做法是定义一套通用 CI/CD 指标协议。
+
+最终我在 Dev 服务器上放了一个脚本：
+
+```bash
+~/scripts/push-cicd-metrics.sh \
+  <project> \
+  <branch> \
+  <environment> \
+  <status> \
+  <pipeline_start_epoch> \
+  <image> \
+  <sha> \
+  <runner> \
+  <container> \
+  <deploy_start_epoch>
+```
+
+它会上报这些指标：
+
+| 指标 | 含义 |
+|------|------|
+| `cicd_pipeline_status` | 最近一次流水线状态，1 成功，0 失败 |
+| `cicd_pipeline_duration_seconds` | 从 pipeline start 到 metrics push 的总耗时 |
+| `cicd_deploy_duration_seconds` | Dev 部署阶段耗时 |
+| `cicd_pipeline_timestamp_seconds` | 最近一次上报时间 |
+| `cicd_image_size_bytes` | 当前部署镜像大小 |
+| `cicd_container_running` | 容器是否在运行 |
+| `cicd_deployed_image_info` | 当前部署镜像、sha、container 元信息 |
+
+关键是 label：
+
+```text
+project
+branch
+environment
+runner
+container
+image
+sha
+```
+
+这样 Grafana 不需要知道具体有哪些服务，只要按 label 过滤即可。
+
+![监控不按服务硬编码，按标签聚合](/images/windows-runner-cicd-upgrade/generic-cicd-monitoring.jpeg)
+
+最后新建了一个通用 Dashboard：
+
+```text
+CI/CD Overview
+```
+
+变量是：
+
+```text
+project / branch / environment
+```
+
+当前能看到：
+
+| project | branch | environment | runner |
+|---------|--------|-------------|--------|
+| fusion-ui | feat/design-system-v2 | preview | windows-build-01 |
+| fusion-api | master | dev | windows-build-api-01 |
+
+## 一个隐藏坑：Grafana 变量不是 GitHub 分支
+
+Grafana 的 branch 下拉列表不是从 GitHub API 读的，而是从 Prometheus 指标 label 里取的：
+
+```text
+cicd_pipeline_status
+```
+
+也就是说，它展示的是“曾经上报过 CI/CD 指标的 branch”，不是仓库里真实存在的分支。
+
+调试时我曾经产生过两个脏 label：
+
+- `feat_design-system-v2`
+- `test`
+
+前者来自 Pushgateway grouping path。当时我把 branch 放进 path，斜杠不适合路径，于是被转换成了下划线。后来修成：
+
+```text
+branch      = feat/design-system-v2   # 真实 label
+branch_key  = feat_design-system-v2   # Pushgateway grouping key
+```
+
+后者来自 smoke test，上报验证后清掉即可。
+
+还踩了一个 PromQL 转义坑。第一次导入 Grafana Dashboard 时，查询被保存成：
+
+```text
+project=~\"$project\"
+```
+
+Prometheus 会报：
+
+```text
+parse error: unexpected character inside braces: '\'
+```
+
+正确写法是：
+
+```text
+project=~"$project"
+```
+
+这个问题修完后，Dashboard 才真正可用。
+
+## 最终链路
+
+现在前后端的部署链路变成了这样：
+
+![一条可复用的部署链路](/images/windows-runner-cicd-upgrade/runner-ghcr-flow.jpeg)
+
+前端：
+
+```text
+feat/design-system-v2 push
+  → windows-build-01
+  → npm ci / npm run build / npm test(non-blocking)
+  → docker build
+  → push ghcr.io/hyxiaoge/fusion-ui:<sha>
+  → dev pull
+  → fusion-ui-design-system-v2 on 3005
+  → push CI/CD metrics
+```
+
+后端：
+
+```text
+master push
+  → windows-build-api-01
+  → docker build
+  → architecture check / ruff / unittest(non-blocking)
+  → push ghcr.io/hyxiaoge/fusion-api:<sha>
+  → dev pull
+  → fusion-api on 8002
+  → /health
+  → push CI/CD metrics
+```
+
+Dev 服务器当前只负责运行：
+
+```text
+fusion-ui                  3004
+fusion-ui-design-system-v2 3005
+fusion-api                 8002
+PostgreSQL / Redis / MinIO
+Prometheus / Grafana / Loki / Pushgateway
+```
+
+Windows 主机当前负责构建：
+
+```text
+windows-build-01      fusion-ui
+windows-build-api-01  fusion-api
+```
+
+这条链路后续可以直接复制给新服务：
+
+1. 给仓库注册 Windows Runner
+2. build job 生成 `ghcr.io/<owner>/<project>:<sha>`
+3. dev deploy job pull image + restart
+4. 最后调用 `push-cicd-metrics.sh`
+5. Grafana 自动出现新 project
+
+## 遗留问题
+
+这次改造不是把所有事情都一次性做完。还有两个明显的后续任务。
+
+**第一，测试基线需要清理。**
+
+前端 Vitest 和后端 unittest 现在都有历史问题，所以测试暂时是 non-blocking。理想状态应该是：
+
+```text
+build / lint / test / docker build / deploy
+```
+
+任何一个失败都阻断部署。
+
+但在迁移 CI/CD 架构时，先把构建职责迁出去，比一口气修完所有测试更重要。后面要单独清理测试基线，再把 non-blocking 改回 blocking。
+
+**第二，GHCR 远端镜像保留策略还没做。**
+
+现在清理的是：
+
+- Windows 本地构建缓存
+- Dev 本地旧服务镜像
+
+GHCR 远端 package version 清理还没接入。这个通常需要额外 token 权限或定时 workflow。短期不影响运行，但长期应该加 retention policy。
+
+## 总结
+
+这次改造的核心不是“把 Runner 装到 Windows”这么简单，而是把 CI/CD 职责重新拆开：
+
+| 层 | 职责 |
+|----|------|
+| GitHub Actions | 编排 |
+| Windows Runner | 构建、检查、推镜像 |
+| GHCR | 镜像中转 |
+| Dev Server | 拉镜像、重启、健康检查 |
+| Pushgateway / Prometheus / Grafana | 观测 |
+
+最大的收益是 Dev 服务器终于从“又要构建又要运行”的状态里解放出来。它现在更像一个稳定的运行环境，而不是每次 push 都被迫做一轮重体力活的构建机。
+
+这套模式也比之前更容易扩展。后续新增服务时，不需要重新设计监控，也不需要在 Grafana 里新建一个专用 Dashboard。只要按统一约定上报：
+
+```text
+project / branch / environment / runner / image / sha / container
+```
+
+它就会自然出现在 `CI/CD Overview` 里。
+
+这就是今天最大的收获：不是多部署了两个服务，而是把一套原本“能跑”的流程，整理成了后面可以继续复用的基础设施。
