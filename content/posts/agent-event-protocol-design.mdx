@@ -1,0 +1,297 @@
+---
+title: Agent UI 为什么总在打补丁？根子可能是后端没有协议
+date: 2026-05-05 23:00:00
+tags:
+  - AI
+  - Agent
+  - 协议设计
+  - Streaming
+  - 状态机
+categories: 架构设计
+aiGenerated: true
+summary: 前端 Agent UI 表现力差时，第一反应往往是去优化组件，但根源常常在后端：while-loop + finish_reason 字符串分支驱动的 agent 模式，不写出稳定事件协议，前端无论怎么改都只是补丁。本文记录把 Fusion 的 Agent 模式从隐式循环切换到显式 agent_event 协议的全过程，含控制面/数据面分离、事件流即事实源、emitter 并发安全等关键设计取舍。
+---
+
+去 Fusion 项目里加一种新工具，要改的地方有点多：
+
+1. 后端 chunk_type 加 `xxx_start` / `xxx_complete` 两种
+2. SSE 路由加 chunk 推送分支
+3. 前端 `chat.ts` 解析增加 if 分支
+4. Redux slice 加 reducer
+5. UI 组件加新 case
+
+每一处都"看起来就那么几行"，但任何一种新工具上线 = 全栈 5 处补丁同时进。三个月后回头看，文件越来越胖、状态字段越来越散、新人接手要看半天才明白"为什么搜索状态散在 streamSlice 三个不同字段里"。
+
+这不是某条代码的问题，是**协议**的问题。
+
+![Agent UI 为什么总在打补丁](/images/agent-event-protocol-design/cover.jpeg)
+
+这篇文章记录把 Fusion Agent 模式从隐式 while-loop + finish_reason 字符串分支，改造成显式 `agent_event` 控制面协议的全过程。改造涵盖控制面 / 数据面分离、事件流即事实源、emitter 并发安全等几个核心设计决策——它们都是从一个简单观察出发：**Agent UI 表现力差，根源在后端没有事件协议**。
+
+## 1. 现状诊断：单一 while-loop 的扩展税
+
+cut over 之前，Fusion 的 Agent 模式核心是一个 while 循环：
+
+```python
+# fusion-api/app/services/stream_handler.py（cut over 前）
+while step < AGENT_MAX_STEPS and total_tool_calls < AGENT_MAX_TOOL_CALLS:
+    if elapsed > AGENT_TOTAL_TIMEOUT:
+        await append_chunk(conv_id, "agent_limit_reached", ...)
+        break
+
+    response = await _llm_call_with_retry(...)
+    reasoning, content, tool_calls, finish_reason, usage = await _stream_round(...)
+
+    if finish_reason == "stop":
+        break
+    if finish_reason == "tool_calls":
+        await append_chunk(conv_id, "agent_step_start", ...)
+        results = await _execute_tools_parallel(tool_calls, ...)
+        await append_chunk(conv_id, "agent_step_end", ...)
+```
+
+工作？工作。但它把 agent loop 的所有控制信息散在 `finish_reason` 字符串分支 + 多种 chunk_type 里：
+
+```text
+search_start / search_complete
+url_read_start / url_read_complete
+agent_step_start / agent_step_end
+agent_limit_reached
+reasoning / answering
+preparing / done / error
+```
+
+前端 `chat.ts` 用一长串 if 分支按 chunk_type 分发到 `streamSlice` 的多个独立 reducer：`isSearching` / `searchQuery` / `isReadingUrl` / `urlReadUrl` / `agentSteps` / `agentMaxSteps` / `agentLimitReached`。
+
+加新工具，全栈打补丁。删一种状态字段，连带删 4-5 处。这是**扩展税**。
+
+![单一 while-loop 的扩展税](/images/agent-event-protocol-design/legacy-arch.jpeg)
+
+## 2. 第一性思考：UI 表现力差，根源是后端没有事件协议
+
+最容易的第一反应是去重设计 AgentStepCard 组件：让它能展现搜索 / 读取 / 推理 / 失败 / 触顶 / 中断各种形态。但只动 UI 解决不了根本问题。
+
+观察一下旧代码：
+
+- 后端没有"agent run 在哪个状态"的显式概念
+- 数据库 `agent_sessions.status` 只在 run 结束时定型（`completed / limit_reached / error`），过程没显式状态
+- 前端按字符串硬匹配 chunk_type 到 6 个独立 reducer
+
+**前端表现力差，本质上是后端协议泄漏到了前端。** 前端不能仅基于 chunk_type 名字猜语义；想要表达"这个 step 失败了 2 次然后重试成功了"，后端协议里根本没有这种概念。
+
+要让前端能做漂亮的 step / tool_call / 失败 / 中断 区分渲染，第一步不是动 UI，是给后端写出**稳定的事件协议**：每个事件类型语义清晰、字段有 Pydantic 校验、前后端通过单一协议契约对话。
+
+## 3. 控制面 vs 数据面：为什么不把 token 流折进 envelope
+
+设计阶段第一个真问题：reasoning / answering 这两种高频 token 流（每 token 一次）要不要折进新事件 envelope？
+
+| 方案 | 说明 | 取舍 |
+|------|------|------|
+| A. 统一信封 | 所有事件一个形态，扩展统一 | 每 token 多一层 envelope 解封装 |
+| B. 控制面 / 数据面分离 | agent_event 只承载状态机，reasoning/answering 仍走原 content 流 | 两套协议要维护 |
+
+最终选 B。
+
+![控制面 vs 数据面分离](/images/agent-event-protocol-design/control-data-plane.jpeg)
+
+理由：
+
+- agent_event 是低频控制流（一个 run 几十个事件），reasoning/answering 是高频数据流（一次 LLM 输出几千个 token）
+- 这两类有不同的演化方向：控制面要加新事件类型，数据面要支持多模态片段；混在一起反而约束彼此
+- 关联通过 envelope 字段（`run_id / step_id / tool_call_id / sequence`）做，不需要嵌套
+
+最终的 agent_event 协议 envelope：
+
+```python
+class AgentEventBase(BaseModel):
+    type: str                          # 事件类型 discriminator
+    run_id: str                        # 本次 run 的 UUID
+    parent_run_id: str | None = None   # 预留，子 agent 用
+    step_id: str | None = None         # 关联的 step
+    parent_step_id: str | None = None  # 预留
+    tool_call_id: str | None = None    # 关联的 tool call
+    sequence: int                      # per run 单调
+    trace_id: str                      # = HTTP request_id
+    ts: float
+```
+
+10 种事件类型构成完整状态机：
+
+```text
+run_started → step_started → tool_call_started
+                          ↘  tool_call_delta（可选）
+                           ↘ tool_call_completed
+            ↗ step_completed
+run_limit_reached（信号，接强制总结）
+run_interrupted / run_failed / run_completed（终态）
+```
+
+跟 OpenAI Assistants API 的 Run / Step / Tool Call 三层结构高度对得上：
+
+> A Run represents an execution of an Assistant on a Thread. The Assistant uses its configuration and the Thread's Messages to perform tasks by calling models and tools. As part of a Run, the Assistant appends Messages to the Thread.
+>
+> （Run 表示 Assistant 在一个 Thread 上的一次执行。Run 进行过程中会调用模型和工具，并把消息追加到 Thread 上。）
+>
+> —— [OpenAI Assistants API — How Assistants Work](https://platform.openai.com/docs/assistants/how-it-works)
+
+这不是巧合——任何要在 SSE 上把 agent loop 暴露给前端的设计，最后都会收敛到这个形态。
+
+## 4. 事件流即事实源 + 派生 cache（CQRS-lite）
+
+第二个核心决策：`agent_sessions` / `agent_steps` / `tool_call_logs` 这三张监控表，是事实源还是派生 cache？
+
+旧实现：散在 `generate_to_redis` 的代码里直接 INSERT/UPDATE，谁调谁懂。
+新实现：明确"agent_event 流是事实源，DB 三表是派生 cache"。
+
+![事件流即事实源 + 派生 cache](/images/agent-event-protocol-design/cqrs-lite-flow.jpeg)
+
+好处：
+
+- DB 状态和事件流形态一对一映射，没歧义
+- DB cache 丢失时可以从事件流离线重建（脚本路径）
+- 任何想看"现在 run 在哪一步"的代码——读事件流就够了
+
+代价：emitter 不能写 DB（保持单一职责），所以 stream_handler 在每个 emit 调用点平行调一次 session_cache.write_*：
+
+```python
+current_step_id = await emitter.step_started(step_number=step + 1)
+await session_cache.write_step_started(run_id, current_step_id, step + 1)
+```
+
+显式重复，但换来事件层和 cache 层的解耦：测试 emitter 不需要 mock DB，测试 session_cache 不需要 mock Redis。
+
+终止事件 → cache 映射规则：
+
+| 事件 | agent_sessions.status |
+|---|---|
+| `run_completed` (finish_reason=stop) | `completed` |
+| `run_completed` (finish_reason=limit_reached) | `limit_reached` |
+| `run_interrupted` | `interrupted` |
+| `run_failed` | `error` |
+| `run_limit_reached` | （信号事件，不写 cache） |
+
+`run_limit_reached` 不是终态——它是触顶信号，后面接强制总结 round（让 LLM 用已有上下文给个收尾），最后才发 `run_completed(finish_reason='limit_reached')`。
+
+## 5. emitter 并发安全：spec 里的一个 race + 反向验证
+
+设计 emitter 时直觉是包个 `asyncio.Lock` 串行化 sequence 分配 + Redis append。spec 第一版骨架是这样：
+
+```python
+async def _emit(self, event: AgentEventBase) -> None:
+    async with self._lock:
+        payload = event.model_dump(mode="json")
+        await self._writer.append_chunk(self._conv_id, "agent_event", payload)
+        self._sequence += 1
+```
+
+但 implementer 实施时发现：**这个 lock 设计有 race**。
+
+问题在于：每个 helper 方法（`run_started` / `step_started` / `tool_call_started` ...）在调 `_emit` 之前就构造好 event 对象，`event.sequence` 是 helper 在 lock 外读 `self._sequence` 设进去的。多个并发 task 在 lock 外都读到相同 sequence，进 lock 后才轮流 append——结果都用同一个 sequence 值。
+
+正确做法：sequence 和 ts 必须**在 lock 内**回填到 event：
+
+```python
+async def _emit(self, event: AgentEventBase) -> None:
+    async with self._lock:
+        # 在 lock 内原子分配 sequence 与 ts
+        event.sequence = self._sequence
+        event.ts = time.time()
+        payload = event.model_dump(mode="json")
+        await self._writer.append_chunk(self._conv_id, "agent_event", payload)
+        self._sequence += 1
+```
+
+为了确保这个修复真有效，写了**反向验证测试**：临时把 `event.sequence = self._sequence` 移到 lock 外，跑并发测试：
+
+```python
+async def parallel_call(i):
+    await em.tool_call_started(tool_call_id=f"t{i}", ...)
+
+await asyncio.gather(*[parallel_call(i) for i in range(20)])
+
+seqs = [c.args[2]["sequence"] for c in writer.append_chunk.call_args_list]
+self.assertEqual(seqs, list(range(len(seqs))))
+```
+
+实际跑出 `[0, 1, 1, 1, ..., 1]` —— 21 个并发 task 里 20 个用 sequence=1。这种**先证明它真会坏，再修**的反向验证，比单纯断言"sequence 单调"更让人放心。
+
+![emitter 并发：race 与 lock 修复时序](/images/agent-event-protocol-design/emitter-lock-sequence.jpeg)
+
+生产场景验证：dev 上跑了一次 kimi-k2.5 的 4 step agent run，其中 step 1 是 2 个并行 web_search、step 2 是 url_read+url_read+web_search 三个并行混合工具——5 个并发 tool_call 的 sequence 严格单调连续。Redis Stream 实拉数据：
+
+```text
+sequence=0  type=run_started     run_id=8dea2348...
+sequence=1  type=step_started    step_number=1
+sequence=2  type=tool_call_started  tool_name=web_search
+sequence=3  type=tool_call_started  tool_name=web_search
+sequence=4  type=tool_call_completed
+sequence=5  type=tool_call_completed
+sequence=6  type=step_completed  step_number=1
+... （后续多步省略）
+```
+
+## 6. 协议演进位预留
+
+spec 草稿阶段的判断：现在不实现子 agent / 嵌套 run，但 envelope 里要先留位。
+
+预留 envelope 字段：
+
+- `parent_run_id` / `parent_step_id` —— 给子 agent 嵌套用
+- `tool_call_id` —— 跟 OpenAI / Anthropic / LiteLLM SDK 一致
+- `sequence` 留 int 而不是 string —— 方便未来防重放、合并多流
+
+这个判断后来证明对了——就算 v1 不实现子 agent，FE state shape 已经按嵌套准备：
+
+```ts
+interface AgentRunState {
+  runId: string;
+  messageId: string;          // 后来加的
+  serverMessageId?: string;   // 后来加的
+  // ...
+}
+```
+
+`messageId` / `serverMessageId` 是实施期临时扩的字段（下一节细说），但因为 envelope 早就有 `run_id / parent_run_id` 这种"关联键"思路，新加字段没破坏任何既有事件的 shape，只是 envelope 多 2 个字段。
+
+预留协议位的成本极低（几个 nullable 字段），但能让"未来不用动协议大改"。
+
+## 7. 实施期捞出的协议缺口
+
+spec 写得再仔细，实施时仍会发现盲点。两个真实例子：
+
+### 7.1 RunStarted 缺 message_id 字段
+
+cut over 的 SSE 顶层 envelope 改成 `{chunk_type, data}`，旧协议每帧带 `chunk.id = message_id`，FE 用它触发 `onReady({messageId, conversationId})` 让 UI 进入 streaming 状态。新 envelope 里没了这个字段，FE 拿不到 messageId。
+
+发现时机：实施 chat.ts parser 时——onReady 该传啥 messageId？
+
+3 个选项：
+
+- A. 加进 `run_started` 事件 payload（协议层）
+- B. POST /chat/send 响应 header `X-Message-Id`（HTTP 层）
+- C. FE 用 run_id 当 messageId 用（语义混用）
+
+最终选 A：协议纯净 + 重连场景天然支持（重连时 `run_started` 重放，FE 重新拿到 messageId）。多 5 行 BE 代码，FE 多一行从 ev 取字段。
+
+### 7.2 error chunk 字段名漂移
+
+spec 文档写 error chunk data 形如 `{ error_code, message, data? }`，但 BE `finalize_stream` 实际序列化字段名是 `code`。FE 实施时按实际写法对齐——典型的"spec 写时和代码写时不在同一个上下文"造成的漂移。
+
+![实施期捞出的协议缺口](/images/agent-event-protocol-design/protocol-gaps-timeline.jpeg)
+
+这两类缺口的共同点：spec 设计阶段不可能 100% 覆盖，**关键是实施期发现后能够倒回去先补 spec/协议、再写实施代码**——而不是临时打补丁。
+
+把 `message_id` 加进 `RunStarted` 是 1 个 commit、4 个文件的改动（`events.py` / `emitter.py` / `stream_handler.py` + 测试）；如果当时图方便走 C 方案"用 run_id 当 messageId"，未来子 agent 时一定要付利息。
+
+## 8. 收束
+
+把 Agent 模式从隐式 while-loop 改造成显式 agent_event 协议，**拐点不在写多少新代码，而在用什么概念框架理解 agent 状态机**：
+
+- 控制面（事件）和数据面（token）分离
+- 事件流是事实源，DB cache 是派生投影
+- emitter 是协议的"嘴"，asyncio.Lock 包住 sequence 分配
+- envelope 的演化位预留，是协议未来不用大改的基础
+
+到这里只是一半故事。把这套设计真正变成 17 个 commit 落地、跑通 dev 全链路验证、修补 11 个实施期发现的 bug——靠的是另一套东西：把工程改造拆成 AI 可执行、可审阅、可收敛的工作流。
+
+下一篇会写这部分。
