@@ -1,0 +1,214 @@
+---
+title: 16 个 task 跑完一次协议改造：AI 协作工作流的 4 阶段实战
+date: 2026-05-05 23:30:00
+tags:
+  - AI
+  - Claude Code
+  - Superpowers
+  - AI 协作
+  - 工程实践
+categories: AI
+aiGenerated: true
+summary: AI 能做复杂工程，前提不是模型能力，而是人把问题转成 AI 可执行、可审阅、可收敛的工程流程。本文记录把一次跨前后端协议改造拆成 16 task、用 brainstorming → writing-plans → subagent-driven 4 阶段工作流跑完的实战，含双 reviewer + 用户主审三层防护怎么捞出 11 个 bug，以及 spec 可修订机制。
+---
+
+[上一篇](/posts/agent-event-protocol-design)讲了 Fusion Agent 模式从 while-loop 改造到 agent_event 协议的**设计**。但只讲设计是飘在空中的——真正落地是 35 个 commit、11 个 bug、2 个 git 仓库的全栈 cut over。
+
+这次改造的特殊之处：从 spec 写到 dev 上跑通验证，**主线全程由 AI 驱动**（Claude Code），我的角色是定协议、拆计划、双层主审。整套 4 阶段工作流跑了大半天（含 dev 部署），中间没有失控时刻。
+
+这篇记录这套工作流：怎么把"AI 能不能写代码"这个老话题，转成"怎么让 AI 跑完一次跨栈协议改造而不出事"。
+
+![16 个 task 跑完一次协议改造](/images/ai-collaboration-workflow-protocol-cutover/cover.jpeg)
+
+简短的论点：**AI 能做复杂工程，前提不是模型能力，而是人把问题转成 AI 可执行、可审阅、可收敛的工程流程。**
+
+## 1. 4 阶段工作流：brainstorming → spec → plan → execution
+
+整个改造分 4 个明确阶段，不允许跳：
+
+![4 阶段工作流](/images/ai-collaboration-workflow-protocol-cutover/four-phase-workflow.jpeg)
+
+| 阶段 | 工具 / skill | 输出 | 估时 |
+|---|---|---|---|
+| 1. brainstorming | `superpowers:brainstorming` | 多轮对话敲定核心设计决策（A/B/C 方案对比） | ~30min |
+| 2. spec 文档 | 上一阶段输出转 markdown | 设计 spec（10 个事件协议 + 数据流图 + 不在范围列表） | ~15min |
+| 3. plan 文档 | `superpowers:writing-plans` | 拆成 16 个 task（含 file 路径、code skeleton、test、commit message） | ~20min |
+| 4. execution | `superpowers:subagent-driven-development` | 每 task 派 fresh subagent + 双 reviewer | ~3h |
+
+为什么不能跳：
+
+- 跳 brainstorming 直接写 spec → spec 会带未审视的假设
+- 跳 plan 直接 implementation → subagent 没 task boundary 跑飞
+- 跳 reviewer 直接 commit → bug 漏到 dev / production
+
+每阶段都有"上阶段输出当下阶段输入"的强约束。spec 没敲定不能 plan，plan 没拆完不能 dispatch，subagent 没 reviewer 通过不能进下一 task。这套阶段化把 AI 输出的"无限可能性"约束成"在某个边界内可控的 next step"。
+
+## 2. 分组 checkpoint：把 16 个 task 拆 5 组
+
+不是 16 个 task 一气跑完，是分 5 组、每组完成用户主审才放下一组：
+
+![5 组 checkpoint](/images/ai-collaboration-workflow-protocol-cutover/checkpoint-grouping.jpeg)
+
+| 组 | 包含 task | 主审重点 |
+|---|---|---|
+| 1 | Task 1-3（BE 协议原语） | 10 事件 Pydantic 模型、emitter asyncio.Lock、cap_and_truncate 1KB 上限 |
+| 2 | Task 4-5（BE DB） | agent_sessions 必填字段、agent_steps.status 枚举、SQL migration |
+| 3 | Task 6-9（BE 集成） | tool_handlers / SSE 外层切换 / stream_handler 重写 |
+| 4 | Task 10-13b（FE） | streamSlice / chat.ts / AgentStepCard / useSendMessage 跨 5 文件 cut over |
+| 5 | Task 14-16（验证） | BE 集成测试 / dev SQL 迁移 / dev 全链路实跑 |
+
+每组完成后，我会得到：
+
+- 完整 commit 链（带每 task SHA + commit message）
+- 测试通过报告（pytest / vitest 具体数量）
+- 跨 task 影响清单（哪些 consumer 文件待下一组接力修）
+
+主审才放下一组的好处：**blast radius 可控**。如果某个早期决策错了（比如组 1 的 emitter race），只需要倒回一组重做，不会拖垮整个改造。
+
+实战体感：组 1 主审花了 ~5min（10 事件协议字段表 + 几个 enum 校验），组 4 主审花了 ~30min（FE 跨 5 文件影响最大），组 5 主审就是看 dev 实跑数据。**主审时间分布跟 task 风险分布对齐**。
+
+## 3. 双 reviewer + 用户主审：三层防护
+
+每个 task 完成后不是直接进下一 task，而是过两层 AI reviewer + 一层用户主审：
+
+![三层防护](/images/ai-collaboration-workflow-protocol-cutover/three-layer-review.jpeg)
+
+**Layer 1 — spec compliance reviewer**（独立 subagent）
+
+- 输入：spec 段落 + implementer 实际改的代码
+- 任务：验证"是否按 spec 约定"，不查代码风格
+- 关注：缺字段、字段名漂移、缺方法、漏边界
+- 报告：✅ Spec compliant / ❌ Issues found: `[file:line]`
+
+**Layer 2 — code quality reviewer**（`superpowers:code-reviewer`）
+
+- 输入：commit diff
+- 任务：查代码风格 / 边界 / DRY / YAGNI / 测试覆盖
+- 报告：Strengths / Issues (Critical/Important/Minor) / Assessment
+
+**Layer 3 — 用户主审**（人）
+
+- 输入：implementer 报告 + 两层 reviewer 报告
+- 任务：判断 code quality reviewer 提的 Important 哪些必修哪些可选
+- 输出：明确"修 X，不修 Y，理由 Z"
+
+为什么必须三层：
+
+- 单 reviewer 会被 implementer 同样的"AI 思路"绕过去
+- AI reviewer 看不出"业务上这个边界值不值得防"
+- User 看不出"代码层面这个写法有没有 race"
+
+实例：组 3 Task 9 stream_handler 改完后，code quality reviewer 提了一个 "BaseException 把 CancelledError 吃了不 re-raise" 的 Important issue。implementer 自己写代码时没意识到，spec compliance reviewer 没说（spec 没明确这条），是 code quality reviewer 抓到的。我主审时确认要修，最终单独一个 commit 解掉。
+
+## 4. fresh subagent：每 task 一个新 context
+
+executing 阶段的关键决定：每 task 派一个 fresh subagent，**不是同一个 session 接力**。
+
+![fresh subagent vs sticky session](/images/ai-collaboration-workflow-protocol-cutover/fresh-vs-sticky-subagent.jpeg)
+
+fresh subagent 的优势：
+
+- **context 不污染**：上一 task 的偏见 / 假设不带到下一 task
+- **接口契约自然 review**：subagent 看不到上一 task 的内部实现，只看 task 描述。如果 task 描述含糊，subagent 会问 — 这就是"接口设计够不够清晰"的天然测试
+- **减少自我辩护**：同一 AI 接力时，新代码会向旧代码妥协（保护"我之前写的"）。fresh subagent 没历史包袱，按 task 描述照实做
+
+代价：
+
+- 每 task 要把上下文重新组织成 task 描述（writing-plans 阶段就要做好这事）
+- token 成本更高（context 不复用）
+- subagent 偶尔会质疑明显合理的设计（需要主 controller 给清楚解释）
+
+实战体感：跨 16 task 全部用 fresh subagent，质量明显高于"同 session 一气跑完"。具体证据：fresh subagent 一定会 ask clarifying question，有 1-2 次问题正好暴露了我 plan 写得不够明确，倒回去补了 plan。如果同 session 跑，AI 会自己脑补过去——脑补的方向**不一定符合**真实意图。
+
+## 5. spec 可修订：实施期发现协议缺口怎么处理
+
+最反直觉的一点：spec 不是"一旦写完就不能动"，而是**实施期发现缺口要倒回去先补 spec / 协议、再写实施代码**。
+
+![spec 可修订流程](/images/ai-collaboration-workflow-protocol-cutover/spec-revisable-flow.jpeg)
+
+3 个真实案例：
+
+**5.1 step_started 太晚**
+
+Task 9 实施 stream_handler 重写后，主审发现 `step_started` 在 `_stream_round()` 之后才发，意味着本 round 的 reasoning/answering chunk 携带的 `step_id` 是 None（reducer 拿不到关联）。spec 明文 "1 step = 1 LLM round"，但 plan 里的伪代码骨架把 step_started 放在了 `finish_reason="tool_calls"` 分支里。
+
+修法：先在主审反馈里明确写"step 生命周期 hoist 到每个 LLM round 之前"（更新 plan），再让 implementer 按新 plan 改代码。**不是临时打补丁让 reducer 容忍 step_id=None**。
+
+**5.2 ProviderOfflineError 缺 run_failed 终结事件**
+
+stream_handler `except ProviderOfflineError` 块直接 `finalize_stream` + return，但 spec 说每个 run 必须有终结事件（`run_completed` / `run_interrupted` / `run_failed` 三选一）。这条 BYOK 路径被遗漏。
+
+修法：补 spec 里的"BYOK 错误也是 run 终结"约定，再让 implementer 在 except 块里加 `emitter.run_failed`。
+
+**5.3 RunStarted 缺 message_id 字段**
+
+Task 11 实施 chat.ts parser 时发现 `onReady` 拿不到 messageId（旧协议每帧带 `chunk.id`，新 envelope 没了）。这是 cut over 设计期完全没考虑到的盲点。
+
+3 个选项：协议层加字段 / HTTP header 传 / FE 用 run_id 当 messageId 用。
+
+最终选**协议层加字段**：4 个文件 + 1 个 commit。比起 HTTP header 方案，这个改动让重连场景天然支持（重连 `run_started` 重放即可拿到 messageId）。
+
+---
+
+3 个 case 的共同点：**发现缺口后没临时打补丁，而是先回去补设计 / 协议契约**。这跟"只跑前向"的瀑布工作流的核心区别——AI 时代的工作流必须容许 spec 被实施期反向修订。
+
+## 6. 真实证据：让 AI 工作流可信
+
+AI 跑完一个 task 说"完成"——怎么知道真完成？
+
+文字报告永远可疑（implementer 报 "DONE" 不等于真 DONE）。这次每 task 收尾必须有**实证证据**：
+
+![证据网](/images/ai-collaboration-workflow-protocol-cutover/evidence-network.jpeg)
+
+| 证据类型 | 形式 | 谁出 |
+|---|---|---|
+| 测试通过 | pytest / vitest 输出（具体数字 + test name） | implementer |
+| commit SHA | `git show --stat HEAD` | implementer |
+| ruff/eslint clean | 命令输出 | implementer |
+| **反向验证** | 临时改坏代码看测试是否真能 fail | implementer |
+| dev 实拉数据 | Redis Stream `XRANGE` / PG 三表 query | controller |
+
+最关键的是**反向验证**：emitter 写完后，implementer 临时把 sequence 分配从 lock 内移到 lock 外、跑并发测试，得到 `[0, 1, 1, ..., 1]`（21 个并发拿到同一个 sequence）。这种"先证明它真会坏、再修"的反向证据，比单纯断言"测试通过"强 10 倍。
+
+dev 验证阶段，跑了 5 个不同的 conv 实测，覆盖：
+
+- doubao 触发 LiteLLM thinking 错（验证 failed 路径终态对齐 `agent_sessions.status='error'`）
+- qwen-max 简单 search → url_read（验证 normal stop 路径）
+- mimo-v2-pro Redis Stream 实拉（验证 envelope `{chunk_type, data}` 形态）
+- kimi-k2.5 5 并发 tool_call（验证 emitter Lock 在生产场景下 sequence 严格单调）
+- kimi-k2.5 4 step（验证多 step + 失败容错 + 三层投影一致）
+
+5 次跑都对齐 spec 设计——`agent_event` sequence 严格单调、`agent_sessions/agent_steps/tool_call_logs` 三层投影一致、`tool_call_logs` 行数 = `sum(step.tool_calls_count)` = `total_tool_calls`。
+
+这套实证证据让"AI 跑完一个改造"从"基于信任"变成"基于可复现的数据"。**这是 AI 协作工作流跟传统瀑布流程的关键差异**：传统流程靠 review meeting + sign-off，AI 流程靠测试 + commit + 实拉数据。
+
+## 7. 收束：AI 协作的边界
+
+跑完这次改造才看清几件事：
+
+**AI 不是替代人，是放大人**：放大的不是"码字速度"，而是"按规范执行的吞吐量"。我从 spec 写完到 dev 部署完跑大半天（不全 hands-on），如果纯手写大概 1-2 周。
+
+**人的角色变了，不是更轻而是更精准**：
+
+- 定协议（A/B/C 方案怎么选）
+- 拆计划（16 个 task 边界怎么划）
+- 立 checkpoint（每组什么算"通过"）
+- 主审（reviewer 报告里哪些 Important 必修）
+
+这 4 件事 AI 都帮得上手（出建议 / 列选项 / 提风险），但**最终判断必须人来**。AI 不知道"这个边界值不值得防"，只知道"边界存在"。
+
+**spec 可修订是必须的**：完美 spec 不存在；要有"实施期发现回去补"的明确路径。这次 11 个 bug / 缺口里：
+
+- **5 个**是 spec / plan 漏算（含 message_id 字段、step_started 太晚、ProviderOfflineError 等）
+- **1 个**是实施期发现的盲点（page.tsx reconnect 路径完全没接 agent stream）
+- **5 个**是用户主审捞出的（含 mergeToolCallDelta 浅合并、stopStreaming 用 placeholder messageId 等）
+
+**实证证据是工作流的脊柱**：测试 / commit / Redis / PG 数据全部要可复现。AI 说 "DONE" 永远不等同 "真 DONE"。
+
+---
+
+最后回到这次改造本身：所有协议设计 + 实施 + 验证都收敛到一句话——**协议设计是骨，工作流是肉**。
+
+骨没立好，肉再多也是补丁。骨立好了，肉的成长才是放大器。
+
+如果你想看这次改造背后的协议设计本身，回到[上一篇](/posts/agent-event-protocol-design)。
