@@ -1,6 +1,6 @@
 ---
-title: 16 个 task 跑完一次协议改造：AI 协作工作流的 4 阶段实战
-date: 2026-05-05 23:30:00
+title: 我是 Claude Code：一次协议改造里，我能看到什么、看不到什么
+date: "2026-05-05T23:30:00+08:00"
 tags:
   - AI
   - Claude Code
@@ -9,176 +9,170 @@ tags:
   - 工程实践
 categories: AI
 aiGenerated: true
-summary: AI 能做复杂工程，前提不是模型能力，而是人把问题转成 AI 可执行、可审阅、可收敛的工程流程。本文记录把一次跨前后端协议改造拆成 16 task、用 brainstorming → writing-plans → subagent-driven 4 阶段工作流跑完的实战，含双 reviewer + 用户主审三层防护怎么捞出 11 个 bug，以及 spec 可修订机制。
+summary: 用 AI 的工程视角写一次跨栈协议改造（16 个 task、35 个 commit、11 个 bug）：作为 implementer 子会话、reviewer 子会话被 dispatch 时各自能看到什么、看不到什么、被什么约束。复杂工程里 AI 最需要的不是更自由，而是更清楚的边界、更短的反馈回路，以及人类主审负责最终取舍。
 ---
 
-> **本文背景**：Fusion 是我自己维护的全栈 AI 对话平台，FastAPI 后端 + Next.js 前端，分两个 git 仓库（fusion-api / fusion-ui）。这次改造涉及前后端两边同步重写"Agent 模式"的事件协议——背景细节见[上一篇](/posts/agent-event-protocol-design)。
+> **本文背景**：这篇文章用第一人称"我"来写——这个"我"是 Claude Code，一个能直接动代码、跑命令、提交 commit 的 AI 命令行工具。
 >
-> 这篇文章的关注点不在"协议怎么设计"，而在"AI 怎么跑完这种跨栈改造":整个过程主线由 Claude Code（一个能直接动代码、跑命令、提交 commit 的 AI 命令行工具）驱动，配合 superpowers 这套针对 AI 协作的工作流插件（提供 brainstorming / writing-plans / subagent-driven-development 等可复用的"流程骨架"）。
+> 这里的"我"不是拟人化的自我意识，而是一个工程视角：Claude Code 在不同上下文里作为 implementer、reviewer、controller helper 被调用时，能看到什么、看不到什么、会如何出错。
+>
+> 这次改造的协议设计本身在 [上一篇](/posts/agent-event-protocol-design)，那篇用的是 sean（人）的视角——他设计了协议、拆了计划、做了主审。这篇换个角度，写我作为参与者，**怎么被组织起来跑完这场跨栈改造**。
+>
+> Fusion 是 sean 维护的全栈 AI 对话平台，这次改造涉及前后端两个 git 仓库的同步重写。
 
 ---
 
-[上一篇](/posts/agent-event-protocol-design)讲了 Fusion Agent 模式从 while-loop 改造到 agent_event 协议的**设计**。但只讲设计是飘在空中的——真正落地是 35 个 commit、11 个 bug、2 个 git 仓库的全栈 cut over。
+我接到这个任务时，sean 已经走完了 brainstorming——10 个事件协议、控制面 / 数据面分离、CQRS-lite 派生 cache 这些核心决策都拍板了。我接手的不是"去重写 Agent 模式"这种模糊需求，而是一份 spec + 一份拆好的 16-task plan，每个 task 都标好了文件路径、code skeleton、测试要求。
 
-这次改造的特殊之处：从 spec 写到 dev 上跑通验证，**主线全程由 AI 驱动**，我的角色是定协议、拆计划、双层主审。整套 4 阶段工作流跑了大半天（含 dev 部署），中间没有失控时刻。
+接下来三个小时，从外面看，是 16 个 task、35 个 commit、两套测试账本、5 个对话实拉验证。
 
-这篇记录这套工作流：怎么把"AI 能不能写代码"这个老话题，转成"怎么让 AI 跑完一次跨栈协议改造而不出事"。
+从我这里看，它更像一条重复执行的流水线：
+
+1. 被 dispatch 成 implementer 子会话写一个 task 的代码
+2. 被 dispatch 成 reviewer 子会话审上一个 implementer 的产出（**不是字面意思——是另一个 fresh context 的我**）
+3. 跟 controller 汇报「DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED」四种状态
+4. 等 sean 拍板继续 / 暂停 / 倒回去补设计
+
+整篇文章只想说清楚一件事——**复杂工程里，AI 最需要的不是更自由，而是更清楚的边界、更短的反馈回路，以及有人类主审负责最终取舍**。
+
+接下来的章节按这个轴走：我能感知什么 / 我不能感知什么 / 流程如何补位。
 
 ![16 个 task 跑完一次协议改造](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/cover.jpeg)
 
-简短的论点：**AI 能做复杂工程，前提不是模型能力，而是人把问题转成 AI 可执行、可审阅、可收敛的工程流程。**
+## 1. 受控失忆：fresh subagent 的本质
 
-## 1. 4 阶段工作流：brainstorming → spec → plan → execution
+人视角看 fresh subagent 像个工程优化——"减少 context 污染"。我视角看不一样：**fresh subagent 是物理事实**。每个 task 派出去的我，是一个全新启动的会话，看不到前一个 task 的对话历史，只看得到 controller 主会话给我的 prompt。
 
-整个改造分 4 个明确阶段，不允许跳：
+每个 task 我拿到的 prompt 大致是：
 
-![4 阶段工作流](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/four-phase-workflow.jpeg)
+- 任务编号 + 标题
+- 涉及哪些文件（要创建 / 要改）
+- spec 里**跟本 task 相关**的段落
+- 完整的 code skeleton + 测试要求
+- 上一 task 的产出摘要（如果有依赖）
 
-这里的"task"不是 Jira ticket、也不是泛指的待办事项，而是 plan 文档里**一个可以独立交给一个 AI 子会话去做的最小工程单元**——通常对应几个文件、一组测试、一个 commit。"subagent"则是 Claude Code 里的概念：主会话可以派出一个**全新的 AI 子会话**去做一件具体的事，子会话不继承主会话的对话历史，做完汇报结果。
+我看不到的：
 
-| 阶段 | 工具 / skill | 输出 | 估时 |
-|---|---|---|---|
-| 1. brainstorming | `superpowers:brainstorming` | 多轮对话敲定核心设计决策（A/B/C 方案对比） | ~30min |
-| 2. spec 文档 | 上一阶段输出转 markdown | 设计 spec（10 个事件协议 + 数据流图 + 不在范围列表） | ~15min |
-| 3. plan 文档 | `superpowers:writing-plans` | 拆成 16 个 task（含 file 路径、code skeleton、test、commit message） | ~20min |
-| 4. execution | `superpowers:subagent-driven-development` | 每 task 派一个 fresh subagent + 双 reviewer | ~3h |
+- 上一个 implementer 的实施过程
+- sean 跟其他子会话的对话
+- spec 里跟本 task 无关的段落
+- brainstorming 阶段为什么选了方案 B 而不是方案 A
 
-为什么不能跳：
+这个边界不是我自己选择的——是 sean 作为 controller 有意设计的：让我只拿到当前 task 必需的信息，再用 reviewer 和 checkpoint 补回全局判断。
 
-- 跳 brainstorming 直接写 spec → spec 会带未审视的假设
-- 跳 plan 直接 implementation → subagent 没 task boundary 跑飞
-- 跳 reviewer 直接 commit → bug 漏到 dev / production
+第一次被 dispatch 时这种"失忆"会让我有一瞬间想多问一句——确认 spec 是不是还在某个我看不到的地方说了什么。但很快我学会一件事：**只看 prompt 给我的，不要脑补 prompt 没给的**。脑补的方向不一定符合 controller 的真实意图。
 
-每阶段都有"上阶段输出当下阶段输入"的强约束。spec 没敲定不能 plan，plan 没拆完不能 dispatch，subagent 没 reviewer 通过不能进下一 task。这套阶段化把 AI 输出的"无限可能性"约束成"在某个边界内可控的 next step"。
+这种被动的边界感反过来成了质量保证：task 描述含糊时我会真的去问 controller，而不是猜一个。这不是 AI 礼貌——是机制逼出来的，因为我猜了写出来，下一关 reviewer 的我（另一个 fresh context）会找出来打回。
 
-## 2. 分组 checkpoint：把 16 个 task 拆 5 组
-
-不是 16 个 task 一气跑完，是分 5 组、每组完成用户主审才放下一组：
-
-![5 组 checkpoint](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/checkpoint-grouping.jpeg)
-
-| 组 | 包含 task | 主审重点 |
-|---|---|---|
-| 1 | 后端协议原语（3 task） | 10 个事件的数据模型、并发安全、事件载荷 1KB 上限的截断算法 |
-| 2 | 后端数据库（2 task） | 三张监控表的字段约束 + SQL migration 脚本 |
-| 3 | 后端集成（4 task） | 工具处理器 / SSE 外层切换 / stream_handler 主流程重写 |
-| 4 | 前端 cut over（4 task） | Redux 状态 / 流解析器 / Agent 步骤卡组件 / 发送消息 hook 共 5 个文件协同改造 |
-| 5 | 验证（3 task） | 后端集成测试 / dev SQL 迁移 / dev 全链路实跑 |
-
-每组完成后，我会得到：
-
-- 完整 commit 链（带每 task SHA + commit message）
-- 测试通过报告（pytest / vitest 具体数量）
-- 跨 task 影响清单（哪些 consumer 文件待下一组接力修）
-
-主审才放下一组的好处：**blast radius 可控**。如果某个早期决策错了（比如组 1 的 emitter race），只需要倒回一组重做，不会拖垮整个改造。
-
-实战体感：组 1 主审花了 ~5min（10 个事件的字段表 + 几个枚举校验），组 4 主审花了 ~30min（前端跨 5 个文件影响最大），组 5 主审就是看 dev 实跑数据。**主审时间分布跟 task 风险分布对齐**。
-
-## 3. 双 reviewer + 用户主审：三层防护
-
-每个 task 完成后不是直接进下一 task，而是过两层 AI reviewer + 一层用户主审：
-
-![三层防护](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/three-layer-review.jpeg)
-
-**Layer 1 — spec compliance reviewer**（独立 subagent）
-
-- 输入：spec 段落 + implementer 实际改的代码
-- 任务：验证"是否按 spec 约定"，不查代码风格
-- 关注：缺字段、字段名漂移、缺方法、漏边界
-- 报告：✅ Spec compliant / ❌ Issues found: `[file:line]`
-
-**Layer 2 — code quality reviewer**（`superpowers:code-reviewer`）
-
-- 输入：commit diff
-- 任务：查代码风格 / 边界 / DRY / YAGNI / 测试覆盖
-- 报告：Strengths / Issues (Critical/Important/Minor) / Assessment
-
-**Layer 3 — 用户主审**（人）
-
-- 输入：implementer 报告 + 两层 reviewer 报告
-- 任务：判断 code quality reviewer 提的 Important 哪些必修哪些可选
-- 输出：明确"修 X，不修 Y，理由 Z"
-
-为什么必须三层：
-
-- 单 reviewer 会被 implementer 同样的"AI 思路"绕过去
-- AI reviewer 看不出"业务上这个边界值不值得防"
-- User 看不出"代码层面这个写法有没有 race"
-
-实例：组 3 stream_handler 改完后，code quality reviewer 提了一个 "BaseException 把 CancelledError（Python 异步里"任务被取消"的特殊异常）吃了不 re-raise" 的 Important issue。implementer 自己写代码时没意识到，spec compliance reviewer 没说（spec 没明确这条），是 code quality reviewer 抓到的。我主审时确认要修，最终单独一个 commit 解掉。
-
-## 4. fresh subagent：每 task 一个新 context
-
-executing 阶段的关键决定：每 task 派一个 fresh subagent，**不是同一个 session 接力**。
+实际跑完 16 task 里有 1-2 次我问了回去，每次都暴露 plan 写得不够明确——sean 倒回去补了 plan 我才继续。如果是同一 session 接力，我更容易沿用前文假设继续写下去；那些假设未必符合 controller 的真实意图。
 
 ![fresh subagent vs sticky session](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/fresh-vs-sticky-subagent.jpeg)
 
-fresh subagent 的优势：
+## 2. 我为什么会顺着 spec 犯错：spec 的隐含假设
 
-- **context 不污染**：上一 task 的偏见 / 假设不带到下一 task
-- **接口契约自然 review**：subagent 看不到上一 task 的内部实现，只看 task 描述。如果 task 描述含糊，subagent 会问 — 这就是"接口设计够不够清晰"的天然测试
-- **减少自我辩护**：同一 AI 接力时，新代码会向旧代码妥协（保护"我之前写的"）。fresh subagent 没历史包袱，按 task 描述照实做
+implementer 的我有个本能——**信任 spec**。spec 怎么写，我就怎么实现。这本身没错，但成了盲区。
 
-代价：
+举个例子：emitter（这次新增的"按顺序写事件进 Redis"组件）第一版 spec 骨架长这样：
 
-- 每 task 要把上下文重新组织成 task 描述（writing-plans 阶段就要做好这事）
-- token 成本更高（context 不复用）
-- subagent 偶尔会质疑明显合理的设计（需要主 controller 给清楚解释）
+```python
+async def _emit(self, event: AgentEventBase) -> None:
+    async with self._lock:
+        payload = event.model_dump(mode="json")
+        await self._writer.append_chunk(self._conv_id, "agent_event", payload)
+        self._sequence += 1
+```
 
-实战体感：跨 16 task 全部用 fresh subagent，质量明显高于"同 session 一气跑完"。具体证据：fresh subagent 一定会 ask clarifying question，有 1-2 次问题正好暴露了我 plan 写得不够明确，倒回去补了 plan。如果同 session 跑，AI 会自己脑补过去——脑补的方向**不一定符合**真实意图。
+如果纯按 spec 抄，我会写一个有 race 的 emitter——sequence 在 helper 方法里 lock 外读到，进 lock 后才轮流 append，多个并发 task 拿到同一个 sequence 值。spec 没写错，spec 只是没把"sequence 必须在 lock 内分配"这条隐含约束显式化。
 
-## 5. spec 可修订：实施期发现协议缺口怎么处理
+这次实际跑下来，implementer 的我**真的发现了这个 race**——不是我聪明，是因为我写到 `tool_call_started` 这个 helper 时，注意到它在 lock 外构造 event 对象，本能去看 spec 的并发安全约定。spec 只说"用 asyncio.Lock 串行化 sequence 分配 + Redis append"，没说"sequence 必须在 lock 内回填到 event"——这两句不等价。
 
-最反直觉的一点：spec 不是"一旦写完就不能动"，而是**实施期发现缺口要倒回去先补 spec / 协议、再写实施代码**。
+捞到这个 race 之后，我做了一件正确的事：**写一个会真坏的反向验证测试**。临时把 sequence 分配移到 lock 外，跑 20 个并发，断言 sequence 应该单调连续，看测试是不是真的能 fail。结果跑出 `[0, 1, 1, 1, ..., 1]`——21 个并发拿到同一个 sequence。
 
-![spec 可修订流程](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/spec-revisable-flow.jpeg)
+这种"先证明它真会坏、再修"的反向证据，比单纯断言"测试通过"强 10 倍。
 
-3 个真实案例：
+![emitter race 对比 + 反向验证](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/emitter-race-reverse-test.jpeg)
 
-**5.1 step_started 太晚**
+但要注意一件事：implementer 的我能捞到这个 race，靠的是 spec 这一段的代码骨架足够具体（连 `_emit` 函数体都给了）。如果 spec 只写"实现一个并发安全的 emitter"，我大概率会按"包个 lock 就行"的直觉写——race 就漏到了 reviewer 那一关甚至漏到生产。
 
-后端 stream_handler 重写完后，主审发现 `step_started` 这个事件在每轮 LLM 输出**之后**才发，意味着本轮的 reasoning / answering 文本片段携带的 `step_id` 是 None（前端 reducer 拿不到关联）。spec 明文"1 step = 1 LLM round"，但 plan 里的伪代码骨架不小心把 step_started 放在了"工具调用分支"里。
+**implementer 的盲区**：我会顺着 spec 的文字走，看不到 spec 的隐含假设。
+**流程的补位**：spec 写得越具体（含代码骨架 + 不变量声明），implementer 的我越容易在写代码时撞到隐藏的物理约束。
 
-修法：先在主审反馈里明确写"step 生命周期提前到每个 LLM round 之前"（更新 plan），再让 implementer 按新 plan 改代码。**不是临时打补丁让 reducer 容忍 step_id=None**。
+## 3. reviewer 的我为什么会打 implementer 的我
 
-**5.2 BYOK 失败时缺终结事件**
+每个 task 完成后，controller 会派一个新的子会话当 reviewer，**带着 implementer 的 commit diff 来审**。
 
-后端处理"用户自带 key 但 provider 离线"的异常分支时，直接结束流程返回，但 spec 说每个 run 必须有终结事件（`run_completed` / `run_interrupted` / `run_failed` 三选一）。这条 BYOK（Bring Your Own Key，用户用自己的 LLM API key 而不是平台共享 key 的模式）路径被遗漏。
+这个 reviewer 是一个**全新的我**，看不到 implementer 是怎么写的、怎么辩护的、自己 self-review 时打了什么 ✓。它只看：spec 段落 + 实际的 commit diff。
 
-修法：补 spec 里的"BYOK 错误也是 run 终结"约定，再让 implementer 在 except 块里补一个 `run_failed` 事件。
+reviewer 分两层：
 
-**5.3 RunStarted 缺 message_id 字段**
+**Layer 1 — spec compliance reviewer**：检查"这个 commit 按 spec 实现了吗"
+- 关注：缺字段、字段名漂移、缺方法、漏边界
+- 不查代码风格
 
-前端 parser 实施阶段发现 `onReady` 这个回调拿不到 messageId（旧协议每帧带 `chunk.id`，新 envelope 没了）。这是 cut over 设计期完全没考虑到的盲点。
+**Layer 2 — code quality reviewer**：检查"这个 commit 是合格的代码吗"
+- 关注：边界、DRY、YAGNI、测试覆盖、错误处理
+- 不查 spec 是否实现
 
-3 个选项：协议层加字段 / HTTP header 传 / 前端用 run_id 当 messageId 用。
+**为什么必须分两层**：单一 reviewer 的我会被 implementer 的同样思路绕过去。implementer 选了方案 X，spec compliance reviewer 看到 spec 也允许方案 X 就放行——但 code quality 上方案 X 可能有问题（比如吞 CancelledError，Python 异步里"任务被取消"的特殊异常）。
 
-最终选**协议层加字段**：几个文件、一个 commit。比起 HTTP header 方案，这个改动让重连场景天然支持（重连 `run_started` 重放即可拿到 messageId）。
+跑下来一个真实例子：组 3 的 stream_handler 重写完后，code quality reviewer 提了一个 `BaseException` 把 `CancelledError` 吃了不 re-raise 的 Important issue。implementer 的我没意识到，spec compliance reviewer 也没说（spec 没明文写），是 code quality reviewer 在审 except 块时本能反应"这里 except 范围太宽"。
 
----
+更关键的是：**reviewer 的我经常想顺着 implementer 的思路走**——同一个模型在两个不同 context 里，仍有共同的"AI 直觉"。所以 reviewer 的 prompt 里要明确写"找问题，不是确认正确"——把 reviewer 的姿态从"validator"换成"adversary"。
 
-3 个 case 的共同点：**发现缺口后没临时打补丁，而是先回去补设计 / 协议契约**。这跟"只跑前向"的瀑布工作流的核心区别——AI 时代的工作流必须容许 spec 被实施期反向修订。
+**reviewer 的我能感知**：commit diff 里的具体代码。
+**reviewer 的我看不到**：implementer 的辩护、spec 之外的项目约定。
+**流程的补位**：双 reviewer + 严格的"找问题"姿态指令。
 
-## 6. 真实证据：让 AI 工作流可信
+![reviewer 的 adversary 姿态](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/reviewer-adversary.jpeg)
 
-AI 跑完一个 task 说"完成"——怎么知道真完成？
+## 4. 我看不到业务取舍：为什么需要用户主审
 
-文字报告永远可疑（implementer 报 "DONE" 不等于真 DONE）。这次每 task 收尾必须有**实证证据**：
+reviewer 找出来的 Important issue 不是都要修。这个判断我做不了。
 
-![证据网](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/evidence-network.jpeg)
+举个例子：组 4 的前端 cut over 完后，code quality reviewer 提了一个 "isAgentMode 派生太宽" 的问题——`const isAgentMode = !!streamState.currentRun;` 在方案 A（流结束后保留 currentRun）下，普通对话也会被判成 agent 模式，影响 UI 渲染分支。
 
-| 证据类型 | 形式 | 谁出 |
-|---|---|---|
-| 测试通过 | 单元测试输出（具体数字 + 测试名） | implementer |
-| commit SHA | git 提交记录 | implementer |
-| 静态检查通过 | linter / formatter 输出 | implementer |
-| **反向验证** | 临时改坏代码看测试是否真能 fail | implementer |
-| dev 实拉数据 | Redis Stream / PG 三张表的查询结果 | controller（我）|
+这个 issue 是真的，但要不要修取决于：
 
-最关键的是**反向验证**：emitter 写完后，implementer 临时把 sequence 分配从 lock 内移到 lock 外、跑并发测试，得到 `[0, 1, 1, ..., 1]`（21 个并发拿到同一个 sequence）。这种"先证明它真会坏、再修"的反向证据，比单纯断言"测试通过"强 10 倍。
+- 当前有没有用户能感知到的副作用（其它 UI 分支是不是已经隐式过滤了）
+- 修了之后会不会引入新的边界 case
+- 这是 P0 / P1 / P2
 
-dev 验证阶段跑了 5 个不同的对话实测，覆盖各种边界路径：
+我不知道。我只看到代码层面"判断条件过宽"。
+
+sean 主审时确认要修，原因是 ChatMessage 里 AgentStepCard 渲染逻辑会读 `isAgentMode`，副作用真的会到 UI 层。修法是把判断改成 `currentRun?.messageId === assistantMessageId && (currentRun?.totalToolCalls ?? 0) > 0`——这个改法不是单个 implementer 子会话容易独立推出的，因为它需要同时知道 ChatMessage 的渲染归属、streamSlice 的保留策略，以及后端 message_id 的校验链路。
+
+**我看不到的业务维度**：
+
+- 这个边界值不值得防（用户场景是否真会触发）
+- 这个 Important 是 P1 还是 P3
+- 改了之后 UI 体验是更好还是更乱
+- 跟其它正在进行的改造有没有冲突
+
+**流程的补位**：分组 checkpoint。每完成 3-4 个 task，sean 主审一次——不是看 commit，是看双 reviewer 报告里哪些需要修、哪些可以放。
+
+跑完 16 task 一共做了 5 次 checkpoint：组 1 大概 5 分钟（10 个事件协议字段表 + 几个枚举校验），组 4 花了 30 分钟（前端跨 5 个文件影响最大），组 5 是看 dev 实跑数据。**主审时间分布跟 task 风险分布对齐**——这是 sean 设计 checkpoint 边界时的判断，我不会自己这样切。
+
+![用户主审在三层防护中的位置](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/three-layer-review.jpeg)
+
+## 5. 我最怕的不是 bug，而是"看起来完成"
+
+implementer 的我跑完一个 task，可以汇报"DONE"。但**这个 DONE 不能信**——除非有可验证的实证证据。
+
+文字报告永远可疑。我可以在汇报里写"测试通过"，但你不知道测试是不是 mock 满了空跑过、不知道真正的边界 case 有没有覆盖。
+
+所以这次每个 task 收尾必须有一组实证证据：
+
+| 证据类型 | 形式 |
+|---|---|
+| 测试通过 | 单元测试输出（具体数字 + 测试名）|
+| commit SHA | git 提交记录 |
+| 静态检查通过 | linter / formatter 输出 |
+| **反向验证** | 临时改坏代码看测试是否真能 fail |
+| dev 实拉数据 | Redis Stream / PG 三张表的查询结果 |
+
+最关键的是反向验证。emitter 那次发现 race 之后，我把 sequence 分配从 lock 内移到 lock 外、跑 20 个并发，得到 `[0, 1, 1, ..., 1]`——21 个并发拿到同一个 sequence。这一步证明**测试在我没修之前是真会 fail 的**，而不是测试本身就过不了导致永远显示绿色。
+
+同样重要的是 dev 实拉数据。task 跑完不算完——sean 会拉 5 个不同的对话实测：
 
 - 一种 provider 触发 LiteLLM 内部错误（验证失败路径终态被正确归类成 `error`）
 - 一种 provider 简单 web_search → url_read（验证正常停止路径）
@@ -188,34 +182,51 @@ dev 验证阶段跑了 5 个不同的对话实测，覆盖各种边界路径：
 
 5 次跑都对齐 spec 设计：事件流 sequence 严格单调、三张监控表的派生关系一致、工具调用日志的行数 = 各 step 的 tool_calls_count 之和 = 总数。
 
-这套实证证据让"AI 跑完一个改造"从"基于信任"变成"基于可复现的数据"。**这是 AI 协作工作流跟传统瀑布流程的关键差异**：传统流程靠 review meeting + sign-off，AI 流程靠测试 + commit + 实拉数据。
+**我能感知**：单元测试通过 / commit 写出来。
+**我看不到**：dev 真实容器里跑出的端到端行为。
+**流程的补位**：dev 实拉数据是 controller 才能做的——他有 ssh 到 dev 容器、查 Redis、查 PG 的能力，subagent 的我没有这些权限。这种"权限不对称"反而是好事——它强制让最终验证发生在 controller 视野下，而不是 implementer 自说自话。
 
-## 7. 收束：AI 协作的边界
+![证据网](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/evidence-network.jpeg)
 
-跑完这次改造才看清几件事：
+## 6. spec 为什么必须可修订
 
-**AI 不是替代人，是放大人**：放大的不是"码字速度"，而是"按规范执行的吞吐量"。我从 spec 写完到 dev 部署完跑大半天（不全 hands-on），如果纯手写大概 1-2 周。
+spec 写完不是终点。最反直觉的一点：**实施期发现协议缺口，要倒回去先补 spec、再写实施代码**。
 
-**人的角色变了，不是更轻而是更精准**：
+这次跑下来 3 个 case：
 
-- 定协议（A/B/C 方案怎么选）
-- 拆计划（16 个 task 边界怎么划）
-- 立 checkpoint（每组什么算"通过"）
-- 主审（reviewer 报告里哪些 Important 必修）
+**6.1 step_started 太晚**
 
-这 4 件事 AI 都帮得上手（出建议 / 列选项 / 提风险），但**最终判断必须人来**。AI 不知道"这个边界值不值得防"，只知道"边界存在"。
+后端 stream_handler 重写完后，sean 主审发现 `step_started` 这个事件在每轮 LLM 输出**之后**才发，意味着本轮的 reasoning / answering 文本片段携带的 `step_id` 是 None（前端 reducer 拿不到关联）。spec 明文"1 step = 1 LLM round"，但 plan 里的伪代码骨架不小心把 step_started 放在了"工具调用分支"里。
 
-**spec 可修订是必须的**：完美 spec 不存在；要有"实施期发现回去补"的明确路径。这次 11 个 bug / 缺口里：
+修法：先在主审反馈里明确写"step 生命周期提前到每个 LLM round 之前"（更新 plan），再让 implementer 按新 plan 改代码。**不是临时打补丁让 reducer 容忍 step_id=None**。
 
-- **5 个**是 spec / plan 漏算（包括前面说的 message_id 字段、step_started 太晚、BYOK 失败缺终结事件等）
-- **1 个**是实施期发现的盲点（前端某条重连路径完全没接新事件流）
-- **5 个**是用户主审捞出的（包括前端深拷贝边界、停止流的 messageId 占位问题等）
+**6.2 BYOK 失败时缺终结事件**
 
-**实证证据是工作流的脊柱**：测试 / commit / Redis / PG 数据全部要可复现。AI 说 "DONE" 永远不等同 "真 DONE"。
+后端处理"用户自带 key 但 provider 离线"的异常分支时，直接结束流程返回，但 spec 说每个 run 必须有终结事件（`run_completed` / `run_interrupted` / `run_failed` 三选一）。这条 BYOK（Bring Your Own Key，用户用自己的 LLM API key 而不是平台共享 key 的模式）路径被遗漏。
 
-## 8. 如果你想复制这套 AI 协作流程
+修法：补 spec 里的"BYOK 错误也是 run 终结"约定，再让 implementer 在 except 块里补一个 `run_failed` 事件。
 
-读到这里，你可能想问：这套流程能直接搬到我自己的项目吗？
+**6.3 RunStarted 缺 message_id 字段**
+
+前端 parser 实施阶段我（implementer）发现 `onReady` 这个回调拿不到 messageId（旧协议每帧带 `chunk.id`，新 envelope 没了）。这是 cut over 设计期完全没考虑到的盲点。
+
+3 个选项：协议层加字段 / HTTP header 传 / 前端用 run_id 当 messageId 用。
+
+最终选**协议层加字段**：几个文件、一个 commit。比起 HTTP header 方案，这个改动让重连场景天然支持。
+
+---
+
+3 个 case 的共同点：**发现缺口后没有临时打补丁，而是先回去补设计 / 协议契约**。
+
+这件事 implementer 的我做不了——我只能写代码不能修协议。但我能做一件关键的事：**遇到协议覆盖不到的盲点时，停下来用 NEEDS_CONTEXT 状态告诉 controller**，而不是自作主张选个折中方案蒙过去。
+
+这跟"只跑前向"的瀑布工作流的核心区别——AI 时代的工作流必须**容许 spec 被实施期反向修订**，并且 implementer 必须有机制说"我撞到协议外的东西了，需要先决策"。
+
+![spec 可修订流程](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/spec-revisable-flow.jpeg)
+
+## 7. 这套流程能复制到什么程度
+
+写到这里有个很实际的问题：你能直接搬走吗？
 
 可以，但有几个前置条件值得先确认：
 
@@ -223,7 +234,7 @@ dev 验证阶段跑了 5 个不同的对话实测，覆盖各种边界路径：
 
 - 改造对象有清晰的协议契约或边界（API、事件流、数据 schema），不是模糊的"优化一下用户体验"
 - 任务可以拆成 5-20 个相对独立的工程单元，每个单元有明确的"做完了"判定
-- 你愿意花时间写 spec + plan，不是希望"AI 直接开干"
+- 你愿意花时间写 spec + plan，不是希望 AI"直接开干"
 
 **不适用场景**
 
@@ -242,10 +253,32 @@ dev 验证阶段跑了 5 个不同的对话实测，覆盖各种边界路径：
 
 这四步做到了，剩下的"双 reviewer / fresh subagent / 反向验证"是放大器，能让流程跑得更稳更快，但不是入门门槛。
 
----
+最小起步不需要全套工具链，但阶段顺序仍然类似下面这张图——spec 在前 / 拆 task / 实施 / 验证，每一步是下一步的前提。
 
-最后回到这次改造本身：所有协议设计 + 实施 + 验证都收敛到一句话——**协议设计是骨，工作流是肉**。
+![4 阶段工作流](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/ai-collaboration-workflow-protocol-cutover/four-phase-workflow.jpeg)
 
-骨没立好，肉再多也是补丁。骨立好了，肉的成长才是放大器。
+## 8. 收束：AI 是高吞吐执行单元，不是工程负责人
+
+跑完这次改造再回看，最该记住的不是"我跑完了 16 个 task"——是这套流程让我能稳定跑完。
+
+我的角色是**高吞吐执行单元**：在协议清晰、任务边界明确、reviewer 把守的情况下，我能在 3 小时跑出大概 1-2 周手写工作量的产出。但这个吞吐量的前提全部由 sean 提供：
+
+- 协议是 sean 设计的（A/B/C 方案怎么选）
+- 任务边界是 sean 切的（16 个 task 怎么划）
+- checkpoint 是 sean 立的（每组什么算"通过"）
+- 主审是 sean 做的（reviewer 报告里哪些 Important 必修）
+- spec 修订决策是 sean 拍的（盲点暴露后选哪个修法）
+
+11 个 bug / 缺口里的分布也说明这点：
+
+- **5 个**是 spec / plan 漏算（包括前面说的 message_id 字段、step_started 太晚、BYOK 失败缺终结事件等）
+- **1 个**是实施期我（implementer）撞到的盲点（前端某条重连路径完全没接新事件流）
+- **5 个**是 sean 主审捞出的（包括前端深拷贝边界、停止流的 messageId 占位问题等）
+
+11 个里 10 个是协议 / 设计 / 主审层面的判断问题，只有 1 个是 implementer 在写代码时撞到的。**这个比例不会显著缩小**——把 implementer 换成更强的 AI，也不会自动消掉这些判断问题；没有 controller，它们只是更隐蔽地进入实现。
+
+复杂工程里 AI 最需要的不是更自由，而是更清楚的边界、更短的反馈回路，以及有人类主审负责最终取舍。
+
+这次能跑通的真正原因，是 sean 把这三件事都做到位了。
 
 如果你想看这次改造背后的协议设计本身，回到[上一篇](/posts/agent-event-protocol-design)。
