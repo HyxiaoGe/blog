@@ -1,6 +1,15 @@
 import Image from "next/image";
 import { projects, type ProjectWithGitHub } from "@/content/projects";
 import { getScreenshot } from "@/lib/screenshot";
+import {
+  fetchStatus,
+  lookupLive,
+  statusColor,
+  statusLabel,
+  STATUS_PUBLIC_URL,
+  type LiveStatus,
+  type StatusBundle,
+} from "@/lib/status";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -72,7 +81,10 @@ function timeAgo(dateStr: string): string {
 }
 
 export default async function ProjectsPage() {
-  const enriched = await getProjectsWithGitHub();
+  const [enriched, status] = await Promise.all([
+    getProjectsWithGitHub(),
+    fetchStatus(),
+  ]);
   const categories = [...new Set(enriched.map((p) => p.category))];
 
   return (
@@ -91,11 +103,14 @@ export default async function ProjectsPage() {
         style={{
           fontSize: 16,
           color: "var(--color-text-secondary)",
-          marginBottom: 40,
+          marginBottom: 24,
         }}
       >
         Some things I&apos;ve built.
       </p>
+
+      {status && <StatusBanner status={status} />}
+
       <div
         style={{
           height: 1,
@@ -127,7 +142,12 @@ export default async function ProjectsPage() {
           >
             {enriched
               .filter((p) => p.category === category)
-              .map((project) => (
+              .map((project) => {
+                const live =
+                  project.monitorName && status
+                    ? lookupLive(status, project.monitorName)
+                    : null;
+                return (
                 <article
                   key={project.name}
                   className="card-hover"
@@ -182,8 +202,27 @@ export default async function ProjectsPage() {
                         fontSize: 17,
                         fontWeight: 600,
                         color: "var(--color-text)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
                       }}
                     >
+                      {live && (
+                        <span
+                          title={`${statusLabel(live.status)}${live.ping != null ? ` · ${live.ping}ms` : ""}`}
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            backgroundColor: statusColor(live.status),
+                            boxShadow:
+                              live.status === 1
+                                ? `0 0 8px ${statusColor(1)}`
+                                : "none",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
                       {project.name}
                     </h3>
                     <div
@@ -401,12 +440,162 @@ export default async function ProjectsPage() {
                       </a>
                     )}
                   </div>
+
+                  {live && <HeartbeatStrip live={live} />}
                   </div>
                 </article>
-              ))}
+                );
+              })}
           </div>
         </section>
       ))}
+    </div>
+  );
+}
+
+function StatusBanner({ status }: { status: StatusBundle }) {
+  const live = status.monitors
+    .map((m) => {
+      const beats = status.heartbeats[m.id.toString()] ?? [];
+      return beats[beats.length - 1]?.status;
+    })
+    .filter((s): s is 0 | 1 | 2 | 3 => s !== undefined);
+  const total = live.length;
+  const upCount = live.filter((s) => s === 1).length;
+  const allUp = total > 0 && upCount === total;
+
+  const uptimeVals = status.monitors
+    .map((m) => status.uptime24h[`${m.id}_24`])
+    .filter((v): v is number => typeof v === "number");
+  const avgUptime =
+    uptimeVals.length > 0
+      ? (uptimeVals.reduce((a, b) => a + b, 0) / uptimeVals.length) * 100
+      : null;
+
+  return (
+    <a
+      href={STATUS_PUBLIC_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 16px",
+        borderRadius: 10,
+        border: "1px solid var(--color-border)",
+        backgroundColor: "var(--color-surface)",
+        marginBottom: 24,
+        textDecoration: "none",
+        color: "inherit",
+      }}
+    >
+      <span
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          backgroundColor: allUp ? statusColor(1) : statusColor(0),
+          boxShadow: `0 0 10px ${allUp ? statusColor(1) : statusColor(0)}`,
+          flexShrink: 0,
+        }}
+      />
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--color-text-secondary)",
+          flex: 1,
+        }}
+      >
+        <strong style={{ color: "var(--color-text)", fontWeight: 600 }}>
+          {allUp
+            ? `All ${total} dev services healthy`
+            : `${upCount}/${total} services operational`}
+        </strong>
+        {avgUptime != null && (
+          <>
+            {" · "}
+            {avgUptime.toFixed(avgUptime === 100 ? 0 : 2)}% uptime (24h)
+          </>
+        )}
+      </div>
+      <span
+        style={{
+          fontSize: 12,
+          color: "var(--color-text-tertiary)",
+        }}
+      >
+        Full status →
+      </span>
+    </a>
+  );
+}
+
+function HeartbeatStrip({ live }: { live: LiveStatus }) {
+  const recent = live.heartbeats.slice(-30);
+  const uptimePct =
+    live.uptime24h != null
+      ? (live.uptime24h * 100).toFixed(live.uptime24h === 1 ? 0 : 2)
+      : null;
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        paddingTop: 14,
+        borderTop: "1px dashed var(--color-border)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6,
+          fontSize: 11,
+          color: "var(--color-text-tertiary)",
+        }}
+      >
+        <span>
+          {statusLabel(live.status)}
+          {live.ping != null && ` · ${live.ping}ms`}
+        </span>
+        {uptimePct != null && <span>{uptimePct}% · 24h</span>}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 2,
+          alignItems: "flex-end",
+          height: 18,
+        }}
+      >
+        {Array.from({ length: 30 - recent.length }).map((_, i) => (
+          <span
+            key={`e-${i}`}
+            style={{
+              flex: 1,
+              height: "100%",
+              borderRadius: 2,
+              backgroundColor: "var(--color-bg-secondary)",
+              opacity: 0.4,
+            }}
+          />
+        ))}
+        {recent.map((b, i) => (
+          <span
+            key={i}
+            title={`${b.time}${b.ping != null ? ` · ${b.ping}ms` : ""}`}
+            style={{
+              flex: 1,
+              height: "100%",
+              borderRadius: 2,
+              backgroundColor: statusColor(b.status),
+              opacity: 0.85,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

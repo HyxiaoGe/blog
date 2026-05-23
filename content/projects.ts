@@ -6,6 +6,8 @@ export interface Project {
   demo?: string;
   language: string;
   category: string;
+  /** Uptime Kuma monitor name (e.g. "[Public] Chrono"). If set, card renders live status. */
+  monitorName?: string;
 }
 
 export interface ProjectWithGitHub extends Project {
@@ -18,43 +20,6 @@ export interface ProjectWithGitHub extends Project {
 
 export const projects: Project[] = [
   {
-    name: "Fusion UI",
-    description:
-      "现代化 AI 对话应用，基于 Next.js 和 Electron 构建，支持多模型对话、文件处理和向量搜索。",
-    tech: ["Next.js", "Electron", "Tailwind CSS", "shadcn/ui"],
-    repo: "HyxiaoGe/fusion-ui",
-    demo: "https://fusion-ui-self.vercel.app",
-    language: "TypeScript",
-    category: "AI 应用",
-  },
-  {
-    name: "Fusion API",
-    description:
-      "统一的多模型 AI 聊天集成平台，支持文心一言、通义千问、DeepSeek、OpenAI 等大模型，提供向量检索和文件处理功能。",
-    tech: ["FastAPI", "LangChain", "ChromaDB"],
-    repo: "HyxiaoGe/fusion-api",
-    language: "Python",
-    category: "AI 应用",
-  },
-  {
-    name: "AI Audio Assistant UI",
-    description:
-      "面向音视频内容理解的 AI 助手前端，支持上传与 YouTube 链接，ASR 转写、结构化摘要与实时进度。",
-    tech: ["Next.js", "Tailwind CSS", "WebSocket", "Auth.js"],
-    repo: "HyxiaoGe/ai-audio-assistant-ui",
-    language: "TypeScript",
-    category: "AI 应用",
-  },
-  {
-    name: "AI Audio Assistant API",
-    description:
-      "音视频助手后端：多厂商 LLM/ASR 统一接入，支持转写、结构化摘要、成本优化与健康监控。",
-    tech: ["FastAPI", "Celery", "MinIO"],
-    repo: "HyxiaoGe/ai-audio-assistant-web",
-    language: "Python",
-    category: "AI 应用",
-  },
-  {
     name: "Chrono",
     description:
       "Multi-Agent AI 时间线调研系统：输入关键词，多个 Agent 并行调研，渐进式 SSE 推送，生成交互式 Timeline。",
@@ -63,33 +28,28 @@ export const projects: Project[] = [
     demo: "https://chrono.seanfield.org",
     language: "Python",
     category: "AI 应用",
+    monitorName: "[Public] Chrono",
   },
   {
-    name: "PromptHub",
+    name: "Fusion",
     description:
-      "Prompt 管理与分享平台，集中管理和复用 AI 提示词。",
-    tech: ["FastAPI", "PostgreSQL"],
-    repo: "HyxiaoGe/prompthub",
-    language: "Python",
-    category: "开发工具",
-  },
-  {
-    name: "Idea Generator UI",
-    description:
-      "AI 图像生成实验平台前端，探索 Gemini、FLUX 等模型的图像生成能力。",
-    tech: ["Next.js", "Tailwind CSS"],
-    repo: "HyxiaoGe/idea-generator-ui",
-    language: "TypeScript",
-    category: "AI 应用",
-  },
-  {
-    name: "Idea Generator Web",
-    description:
-      "AI 图像生成实验平台，探索 Google Gemini 3 Pro Image 等模型的图像生成能力。",
-    tech: ["Python", "Streamlit"],
-    repo: "HyxiaoGe/idea-generator-web",
-    demo: "https://nano-banana-lab-kkqghjvwjmgj6mp4nssdzd.streamlit.app/",
+      "多模型 AI 对话应用，统一接入 DeepSeek、OpenAI、文心、通义千问等大模型，支持文件处理、向量检索与多端使用。",
+    tech: ["Next.js", "Electron", "FastAPI", "LangChain", "ChromaDB"],
+    repo: "HyxiaoGe/fusion-ui",
+    demo: "https://fusion.seanfield.org",
     language: "Python",
     category: "AI 应用",
+    monitorName: "[Public] Fusion",
+  },
+  {
+    name: "AI Audio",
+    description:
+      "AI 音视频内容理解助手，支持上传与 YouTube 链接，多厂商 LLM/ASR 接入，输出转写、结构化摘要与实时进度。",
+    tech: ["Next.js", "FastAPI", "Celery", "MinIO", "WebSocket"],
+    repo: "HyxiaoGe/ai-audio-assistant-ui",
+    demo: "https://audio.seanfield.org",
+    language: "Python",
+    category: "AI 应用",
+    monitorName: "[Public] Audio",
   },
 ];
