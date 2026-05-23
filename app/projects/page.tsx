@@ -1,4 +1,6 @@
+import Image from "next/image";
 import { projects, type ProjectWithGitHub } from "@/content/projects";
+import { getScreenshot } from "@/lib/screenshot";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -14,8 +16,11 @@ const languageColors: Record<string, string> = {
 async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
   const results = await Promise.all(
     projects.map(async (project) => {
+      const screenshotPromise = project.demo
+        ? getScreenshot(project.demo)
+        : Promise.resolve(null);
       try {
-        const [repoRes, commitsRes] = await Promise.all([
+        const [repoRes, commitsRes, screenshot] = await Promise.all([
           fetch(`https://api.github.com/repos/${project.repo}`, {
             next: { revalidate: 3600 },
           }),
@@ -23,6 +28,7 @@ async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
             `https://api.github.com/repos/${project.repo}/commits?per_page=1`,
             { next: { revalidate: 3600 } }
           ),
+          screenshotPromise,
         ]);
 
         const repo = await repoRes.json();
@@ -36,6 +42,7 @@ async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
           lastCommitMessage: Array.isArray(commits) && commits[0]
             ? commits[0].commit.message.split("\n")[0]
             : "",
+          screenshot,
         };
       } catch {
         return {
@@ -44,6 +51,7 @@ async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
           forks: 0,
           updatedAt: "",
           lastCommitMessage: "",
+          screenshot: await screenshotPromise.catch(() => null),
         };
       }
     })
@@ -127,11 +135,39 @@ export default async function ProjectsPage() {
                     borderRadius: 12,
                     border: "1px solid var(--color-border)",
                     backgroundColor: "var(--color-surface)",
-                    padding: 24,
                     display: "flex",
                     flexDirection: "column",
+                    overflow: "hidden",
                   }}
                 >
+                  {/* Screenshot (demo 项目才有) */}
+                  {project.screenshot && project.demo && (
+                    <a
+                      href={project.demo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open ${project.name} demo`}
+                      style={{
+                        display: "block",
+                        position: "relative",
+                        aspectRatio: "16 / 9",
+                        backgroundColor: "var(--color-bg-secondary)",
+                        borderBottom: "1px solid var(--color-border)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Image
+                        src={project.screenshot}
+                        alt={`${project.name} preview`}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 360px"
+                        style={{ objectFit: "cover", objectPosition: "top" }}
+                        unoptimized
+                      />
+                    </a>
+                  )}
+
+                  <div style={{ padding: 24, display: "flex", flexDirection: "column", flex: 1 }}>
                   {/* Header */}
                   <div
                     style={{
@@ -364,6 +400,7 @@ export default async function ProjectsPage() {
                         Demo
                       </a>
                     )}
+                  </div>
                   </div>
                 </article>
               ))}

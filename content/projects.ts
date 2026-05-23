@@ -13,6 +13,7 @@ export interface ProjectWithGitHub extends Project {
   forks: number;
   updatedAt: string;
   lastCommitMessage: string;
+  screenshot: string | null;
 }
 
 export const projects: Project[] = [
@@ -50,6 +51,16 @@ export const projects: Project[] = [
       "音视频助手后端：多厂商 LLM/ASR 统一接入，支持转写、结构化摘要、成本优化与健康监控。",
     tech: ["FastAPI", "Celery", "MinIO"],
     repo: "HyxiaoGe/ai-audio-assistant-web",
+    language: "Python",
+    category: "AI 应用",
+  },
+  {
+    name: "Chrono",
+    description:
+      "Multi-Agent AI 时间线调研系统：输入关键词，多个 Agent 并行调研，渐进式 SSE 推送，生成交互式 Timeline。",
+    tech: ["Next.js", "FastAPI", "Pydantic AI", "Tavily"],
+    repo: "HyxiaoGe/chrono",
+    demo: "https://chrono.seanfield.org",
     language: "Python",
     category: "AI 应用",
   },

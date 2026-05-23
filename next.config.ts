@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com",
       },
+      {
+        protocol: "https",
+        hostname: "*.microlink.io",
+      },
     ],
   },
 };
