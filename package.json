@@ -6,11 +6,19 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "validate:content": "node scripts/validate-content.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test:e2e": "playwright test",
+    "check": "pnpm validate:content && pnpm typecheck && pnpm lint && pnpm build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "packageManager": "pnpm@10.26.2",
   "dependencies": {
     "ali-oss": "^6.23.0",
@@ -34,7 +42,9 @@
     "@types/node": "25.3.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "playwright": "^1.58.2",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "16.1.6",
+    "@playwright/test": "^1.58.2",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3"

@@ -4,6 +4,7 @@ date: 2025-02-12 22:48:43
 tags:
   - RAG
 categories: AI
+summary: 从大模型幻觉出发介绍 RAG 的核心原理、检索流程、向量数据库、相似度计算与 Embedding，建立检索增强生成的完整入门框架。
 ---
 
 ## 什么是大语言模型的幻觉？
@@ -70,8 +71,6 @@ categories: AI
 
 简单来说：RAG = 外部知识检索 + Prompt构建 + LLM 生成
 
-![image](/medias/featureimages/blog/da-mo-xing-rag-ying-yong-kai-fa-ji-chu-ji-ru-men/image1.png)
-
 ### 为什么需要RAG？
 
 LLM虽然是一个强大的工具，但它本身拒绝了解任何时事，且它给出的答案总是非常流畅，内容却不一定靠谱。这存在几个主要的问题:
@@ -103,8 +102,6 @@ RAG采用三种主要的检索方式：
     - 先生成答案
     - 然后检索验证
     - 对答案进行修正
-
-![image](/medias/featureimages/blog/da-mo-xing-rag-ying-yong-kai-fa-ji-chu-ji-ru-men/image2.png)
 
 ### RAG实战示例
 
@@ -188,9 +185,7 @@ distance(A,B) = √∑(Ai-Bi)²
 
 ```
 
-例如下图：左侧就是`欧式距离`，右侧就是`余弦相似度`。
-
-![image](/medias/featureimages/blog/da-mo-xing-rag-ying-yong-kai-fa-ji-chu-ji-ru-men/image3.png)
+在实际检索中，`欧式距离`关注向量之间的绝对距离，`余弦相似度`则关注向量方向是否接近。
 
 ### 实际应用场景
 
@@ -216,8 +211,6 @@ Embedding(嵌入)是一种在机器学习中广泛使用的技术，它能将文
 [0.5, 0.8, 0.7, 0.5, 0.8, 0.7, 0.5, 0.8, 0.7, 0.5]
 
 ```
-
-![image](/medias/featureimages/blog/da-mo-xing-rag-ying-yong-kai-fa-ji-chu-ji-ru-men/image4.png)
 
 ### 主流的Embedding模型
 

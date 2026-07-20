@@ -11,22 +11,56 @@ const languageColors: Record<string, string> = {
   Go: "hsl(190 70% 45%)",
 };
 
+const githubApiBaseUrl = process.env.GITHUB_API_BASE_URL ?? "https://api.github.com";
+
+interface GitHubRepositoryResponse {
+  stargazers_count?: number;
+  forks_count?: number;
+  pushed_at?: string;
+  updated_at?: string;
+}
+
+interface GitHubCommitResponse {
+  commit?: {
+    message?: string;
+  };
+}
+
+async function fetchGitHub<T>(url: string): Promise<T> {
+  const headers: HeadersInit = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+
+  if (process.env.GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
+
+  const response = await fetch(url, {
+    headers,
+    next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API returned ${response.status} for ${url}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
   const results = await Promise.all(
     projects.map(async (project) => {
       try {
-        const [repoRes, commitsRes] = await Promise.all([
-          fetch(`https://api.github.com/repos/${project.repo}`, {
-            next: { revalidate: 3600 },
-          }),
-          fetch(
-            `https://api.github.com/repos/${project.repo}/commits?per_page=1`,
-            { next: { revalidate: 3600 } }
+        const [repo, commits] = await Promise.all([
+          fetchGitHub<GitHubRepositoryResponse>(
+            `${githubApiBaseUrl}/repos/${project.repo}`
+          ),
+          fetchGitHub<GitHubCommitResponse[]>(
+            `${githubApiBaseUrl}/repos/${project.repo}/commits?per_page=1`
           ),
         ]);
-
-        const repo = await repoRes.json();
-        const commits = await commitsRes.json();
 
         return {
           ...project,
@@ -34,16 +68,18 @@ async function getProjectsWithGitHub(): Promise<ProjectWithGitHub[]> {
           forks: repo.forks_count ?? 0,
           updatedAt: repo.pushed_at ?? repo.updated_at ?? "",
           lastCommitMessage: Array.isArray(commits) && commits[0]
-            ? commits[0].commit.message.split("\n")[0]
+            ? commits[0].commit?.message?.split("\n")[0] ?? ""
             : "",
+          githubAvailable: true,
         };
       } catch {
         return {
           ...project,
-          stars: 0,
-          forks: 0,
+          stars: null,
+          forks: null,
           updatedAt: "",
           lastCommitMessage: "",
+          githubAvailable: false,
         };
       }
     })
@@ -225,7 +261,7 @@ export default async function ProjectsPage() {
                     }}
                   >
                     {/* Stars */}
-                    <span
+                    {project.githubAvailable ? <span
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -245,9 +281,9 @@ export default async function ProjectsPage() {
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                       </svg>
                       {project.stars}
-                    </span>
+                    </span> : null}
                     {/* Forks */}
-                    <span
+                    {project.githubAvailable ? <span
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -271,10 +307,13 @@ export default async function ProjectsPage() {
                         <path d="M12 12v3" />
                       </svg>
                       {project.forks}
-                    </span>
+                    </span> : null}
                     {/* Updated */}
                     {project.updatedAt && (
                       <span>Updated {timeAgo(project.updatedAt)}</span>
+                    )}
+                    {!project.githubAvailable && (
+                      <span title="GitHub API 暂时不可用">GitHub stats unavailable</span>
                     )}
                   </div>
 
