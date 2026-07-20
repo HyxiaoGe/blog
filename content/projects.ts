@@ -9,10 +9,11 @@ export interface Project {
 }
 
 export interface ProjectWithGitHub extends Project {
-  stars: number;
-  forks: number;
+  stars: number | null;
+  forks: number | null;
   updatedAt: string;
   lastCommitMessage: string;
+  githubAvailable: boolean;
 }
 
 export const projects: Project[] = [

@@ -28,7 +28,9 @@ export function TableOfContents() {
       el.id = id;
       items.push({ id, text, level: el.tagName === "H2" ? 2 : 3 });
     });
-    setHeadings(items);
+    const animationFrame = window.requestAnimationFrame(() => {
+      setHeadings(items);
+    });
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -43,7 +45,10 @@ export function TableOfContents() {
     );
 
     elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+    };
   }, []);
 
   if (headings.length < 3) {

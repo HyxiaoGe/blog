@@ -7,6 +7,7 @@ tags:
   - Syncthing
   - Linux
 categories: DevOps
+summary: 一次开发服务器磁盘与部署体系治理实践：清理 Docker 构建缓存、优化镜像、扩容存储，并通过 Samba 和 Syncthing 建立三端文件同步。
 ---
 
 开发服务器跑了一个月，磁盘占用悄悄飙到了 77%。排查下来发现 Docker Build Cache 吃掉了 249GB。借这个契机，做了一次完整的服务器优化：清理磁盘、优化 Dockerfile、挂载闲置硬盘、搭建 Samba + Syncthing 三端文件同步。

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PostMeta } from "@/lib/posts";
 
@@ -22,7 +21,6 @@ function hashString(str: string): number {
 }
 
 export function PostCard({ post }: { post: PostMeta }) {
-  const router = useRouter();
   const gradient = gradients[hashString(post.slug) % gradients.length];
   const date = new Date(post.date).toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -31,11 +29,7 @@ export function PostCard({ post }: { post: PostMeta }) {
   });
 
   return (
-    <div
-      className="group block cursor-pointer"
-      onClick={() => router.push(`/posts/${post.slug}`)}
-    >
-      <article className="card-hover rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <article className="post-card group card-hover relative rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
         {/* Gradient banner */}
         <div
           className="h-1.5 transition-all duration-300 group-hover:h-2.5"
@@ -57,8 +51,13 @@ export function PostCard({ post }: { post: PostMeta }) {
           </div>
 
           {/* Title */}
-          <h2 className="text-lg font-semibold leading-snug mb-2 text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors duration-200">
-            {post.title}
+          <h2 className="text-lg font-semibold leading-snug mb-2">
+            <Link
+              href={`/posts/${post.slug}`}
+              className="post-card-title-link text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors duration-200"
+            >
+              {post.title}
+            </Link>
           </h2>
 
           {/* Summary */}
@@ -76,7 +75,7 @@ export function PostCard({ post }: { post: PostMeta }) {
                   key={tag}
                   href={`/tags/${encodeURIComponent(tag)}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
+                  className="post-card-tag-link text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
                   style={{ textDecoration: "none" }}
                 >
                   {tag}
@@ -86,6 +85,5 @@ export function PostCard({ post }: { post: PostMeta }) {
           )}
         </div>
       </article>
-    </div>
   );
 }
