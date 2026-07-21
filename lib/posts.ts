@@ -14,6 +14,13 @@ export interface PostMeta {
   summary: string;
   readingTime: string;
   aiGenerated?: boolean;
+  cover?: string;
+}
+
+function getPostCover(slug: string): string | undefined {
+  const filename = "thumbnail.jpeg";
+  const absolutePath = path.join(process.cwd(), "public", "images", slug, filename);
+  return fs.existsSync(absolutePath) ? `/images/${slug}/${filename}` : undefined;
 }
 
 export function getAllPosts(): PostMeta[] {
@@ -38,6 +45,7 @@ export function getAllPosts(): PostMeta[] {
         summary: data.summary || "",
         readingTime: stats.text,
         aiGenerated: data.aiGenerated || false,
+        cover: getPostCover(slug),
       };
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -84,6 +92,7 @@ export function getPostBySlug(slug: string): { meta: PostMeta; content: string }
       summary: data.summary || "",
       readingTime: stats.text,
       aiGenerated: data.aiGenerated || false,
+      cover: getPostCover(slug),
     },
     content,
   };

@@ -68,7 +68,7 @@ body {
 
 .site-container-wide {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1180px;
   margin-left: auto;
   margin-right: auto;
   padding-left: 24px;
@@ -78,7 +78,7 @@ body {
 /* Homepage two-column layout */
 .home-layout {
   display: flex;
-  gap: 48px;
+  gap: 56px;
 }
 
 .home-main {
@@ -87,14 +87,70 @@ body {
 }
 
 .home-sidebar {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
   position: sticky;
   top: 96px;
   align-self: flex-start;
 }
 
-@media (max-width: 768px) {
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.section-heading-row-sidebar {
+  margin-bottom: 16px;
+}
+
+.section-heading {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.section-count {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.home-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-tag-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.home-tag-link span {
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+.home-tag-link:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  color: var(--color-accent);
+}
+
+@media (max-width: 900px) {
   .home-layout {
     flex-direction: column;
     gap: 32px;
@@ -174,6 +230,49 @@ body {
 .post-card-tag-link {
   position: relative;
   z-index: 1;
+}
+
+.post-card-layout {
+  display: flex;
+  align-items: stretch;
+}
+
+.post-card-cover {
+  position: relative;
+  width: 210px;
+  min-height: 112px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+}
+
+.post-card-cover-image {
+  object-fit: cover;
+  transition: transform 300ms ease;
+}
+
+.post-card:hover .post-card-cover-image {
+  transform: scale(1.025);
+}
+
+.post-card-content {
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .post-card-layout {
+    display: block;
+  }
+
+  .post-card-cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
 }
 
 .post-card:focus-within {

@@ -1,6 +1,5 @@
-"use client";
-
 import Link from "next/link";
+import Image from "next/image";
 import type { PostMeta } from "@/lib/posts";
 
 const gradients = [
@@ -27,31 +26,40 @@ export function PostCard({ post }: { post: PostMeta }) {
     month: "long",
     day: "numeric",
   });
-
   return (
-      <article className="post-card group card-hover relative rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
-        {/* Gradient banner */}
-        <div
-          className="h-1.5 transition-all duration-300 group-hover:h-2.5"
-          style={{ background: gradient }}
-        />
+    <article className="post-card group card-hover relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div
+        className="h-1.5 transition-all duration-300 group-hover:h-2.5"
+        style={{ background: gradient }}
+      />
 
-        <div className="p-5 sm:p-6">
-          {/* Meta row */}
-          <div className="flex items-center gap-2 text-xs mb-3 text-[var(--color-text-tertiary)]">
+      <div className={post.cover ? "post-card-layout" : undefined}>
+        {post.cover && (
+          <div className="post-card-cover" aria-hidden="true">
+            <Image
+              src={post.cover}
+              alt=""
+              fill
+              sizes="(max-width: 640px) calc(100vw - 48px), 210px"
+              className="post-card-cover-image"
+            />
+          </div>
+        )}
+
+        <div className="post-card-content p-5 sm:p-6">
+          <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-tertiary)]">
             <time>{date}</time>
-            <span className="opacity-40">/</span>
+            <span className="opacity-40" aria-hidden="true">·</span>
             <span>{post.readingTime}</span>
             {post.category && (
               <>
-                <span className="opacity-40">/</span>
+                <span className="opacity-40" aria-hidden="true">·</span>
                 <span>{post.category}</span>
               </>
             )}
           </div>
 
-          {/* Title */}
-          <h2 className="text-lg font-semibold leading-snug mb-2">
+          <h2 className="mb-2 line-clamp-2 text-[19px] font-semibold leading-snug">
             <Link
               href={`/posts/${post.slug}`}
               className="post-card-title-link text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors duration-200"
@@ -60,21 +68,18 @@ export function PostCard({ post }: { post: PostMeta }) {
             </Link>
           </h2>
 
-          {/* Summary */}
           {post.summary && (
-            <p className="text-sm leading-relaxed line-clamp-2 text-[var(--color-text-secondary)] mb-3">
+            <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
               {post.summary}
             </p>
           )}
 
-          {/* Tags */}
           {post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-3">
+            <div className="flex flex-wrap items-center gap-1.5">
               {post.tags.map((tag) => (
                 <Link
                   key={tag}
                   href={`/tags/${encodeURIComponent(tag)}`}
-                  onClick={(e) => e.stopPropagation()}
                   className="post-card-tag-link text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
                   style={{ textDecoration: "none" }}
                 >
@@ -84,6 +89,7 @@ export function PostCard({ post }: { post: PostMeta }) {
             </div>
           )}
         </div>
-      </article>
+      </div>
+    </article>
   );
 }
