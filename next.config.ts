@@ -26,6 +26,15 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async redirects() {
+    return [
+      {
+        source: "/projects",
+        destination: "/vibe-coding",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

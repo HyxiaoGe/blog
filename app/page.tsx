@@ -40,36 +40,28 @@ export default function HomePage() {
       <div className="home-layout">
         {/* Left: posts */}
         <div className="home-main">
-          <h2 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 24, color: "var(--color-text-tertiary)" }}>
-            All Posts
-          </h2>
+          <div className="section-heading-row">
+            <h2 className="section-heading">All Posts</h2>
+            <span className="section-count">{posts.length}</span>
+          </div>
           <PostList posts={posts} />
         </div>
 
         {/* Right: tags sidebar */}
         <aside className="home-sidebar">
-          <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 16, color: "var(--color-text-tertiary)" }}>
-            Tags
-          </h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div className="section-heading-row section-heading-row-sidebar">
+            <h3 className="section-heading">Tags</h3>
+            <span className="section-count">{tags.length}</span>
+          </div>
+          <div className="home-tag-list">
             {tags.map((tag) => (
               <Link
                 key={tag.name}
                 href={`/tags/${encodeURIComponent(tag.name)}`}
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  padding: "5px 12px",
-                  borderRadius: 6,
-                  backgroundColor: "var(--color-bg-secondary)",
-                  color: "var(--color-text-secondary)",
-                  textDecoration: "none",
-                  border: "1px solid var(--color-border)",
-                  transition: "color 150ms ease, border-color 150ms ease",
-                }}
+                className="home-tag-link"
               >
                 {tag.name}
-                <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.45 }}>{tag.count}</span>
+                <span>{tag.count}</span>
               </Link>
             ))}
           </div>
