@@ -25,16 +25,15 @@ test("标签页面能够筛选文章", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
 });
 
-test("项目页即使外部统计不可用也能渲染", async ({ page }) => {
+test("Vibe Coding 页面在外部数据不可用时仍能渲染", async ({ page }) => {
   await page.goto("/projects");
 
-  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Fusion UI" })).toBeVisible();
-  await expect(page.getByText("GitHub stats unavailable").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "GitHub" }).first()).toHaveAttribute(
-    "href",
-    "https://github.com/HyxiaoGe/fusion-ui",
-  );
+  await expect(page).toHaveURL(/\/vibe-coding$/);
+  await expect(
+    page.getByRole("heading", { name: "Projects & inspirations." }),
+  ).toBeVisible();
+  await expect(page.getByText("暂时无法读取 GitHub 数据")).toBeVisible();
+  await expect(page.getByText("请稍后刷新页面。")).toBeVisible();
 });
 
 test("未知页面显示自定义 404", async ({ page }) => {
