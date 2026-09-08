@@ -43,7 +43,7 @@ summary: 分享我如何用四个飞书群接收 dev 巡检、Codex 重置信号
 
 从整体上看，我现在的通知来源可以画成下面这样。
 
-![四个飞书群及其对应的采集程序、处理规则和发送方式](/images/my-feishu-notification-workflow/notification-routes.svg)
+![四个飞书群及其对应的采集程序、处理规则和发送方式](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/notification-routes.svg)
 
 这些链路共用飞书作为阅读入口，各自保留自己的采集和判断逻辑：
 
@@ -79,7 +79,7 @@ WatchMend 是我用于个人 dev 环境的运维哨兵。它可以从几个角�
 
 服务不可用、容器异常、资源耗尽或监控数据源持续故障等情况，在达到相应规则条件后，会进入实时通知路径。当前 dev 配置也开启了非紧急消息汇总，将这类信息放进早晚摘要，便于集中查看。
 
-![Dev巡检群的真实内部体检日报，展示服务可用率、p95 延迟、探针统计和未决事件](/images/my-feishu-notification-workflow/feishu-dev-patrol.jpg)
+![Dev巡检群的真实内部体检日报，展示服务可用率、p95 延迟、探针统计和未决事件](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-dev-patrol.jpg)
 
 *内部体检日报的可见部分：服务可用率、p95 延迟、探针统计和未决事件放在同一张卡片中。图中保留了当时的异常项；这些是监控观察结果，具体原因仍需排查，已经下线的服务也需要同步维护监控清单。*
 
@@ -130,7 +130,7 @@ Dev巡检还有一条我很关注的链路：**Codex 重置信号和到账确认
 
 这些阶段不要求逐一经过。疑似预告之后可能直接确认；此前没有发现预告，也可能收到“静默重置已确认”。只有存在明确时间窗口的相应事件，才有条件判断是否延迟。
 
-![Dev巡检中真实的 Codex 重置疑似预告，展示阶段、待确认类型和一条来源证据](/images/my-feishu-notification-workflow/feishu-codex-reset-signal.jpg)
+![Dev巡检中真实的 Codex 重置疑似预告，展示阶段、待确认类型和一条来源证据](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-codex-reset-signal.jpg)
 
 *重置信号通知的状态部分。这条消息在 2026 年 9 月 8 日 03:26 发出，当时只有 1 条、1 个来源族的证据，类型仍为“待确认”。*
 
@@ -146,7 +146,7 @@ Dev巡检还有一条我很关注的链路：**Codex 重置信号和到账确认
 
 下面就是同一天后续收到的确认通知：
 
-![Dev巡检中真实的 Codex 重置落地确认，展示直接重置类型、确认时间和公开记录与本机额度窗口的核验方式](/images/my-feishu-notification-workflow/feishu-codex-reset-confirmed.jpg)
+![Dev巡检中真实的 Codex 重置落地确认，展示直接重置类型、确认时间和公开记录与本机额度窗口的核验方式](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-codex-reset-confirmed.jpg)
 
 *落地确认通知的状态部分。卡片记录的确认时间是 2026 年 9 月 8 日 10:00，机器人在 10:58 推送；核验方式为“官方重置记录 + 本机共享 Codex 周额度窗口”。文中时间均按东八区表示。*
 
@@ -228,7 +228,7 @@ if latest_by_image:
 
 这里的 `image` 包含具体镜像引用。同一仓库的两个不同 tag 仍然可能分别出现在摘要里。
 
-![上游服务状态群的真实消息，同屏展示状态页采集提醒、外部依赖巡检和三个镜像的 Diun 更新摘要](/images/my-feishu-notification-workflow/feishu-upstream-digest.jpg)
+![上游服务状态群的真实消息，同屏展示状态页采集提醒、外部依赖巡检和三个镜像的 Diun 更新摘要](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-upstream-digest.jpg)
 
 *同一个群中的三种消息：状态页采集失败提醒、外部依赖巡检汇总，以及 Diun 更新摘要。下方两个 redis_exporter tag 分别保留，也能看出汇总是按完整镜像引用去重。*
 
@@ -272,7 +272,7 @@ ai-cost-hub 整理字段、判断状态
 
 每天采集的历史会保存到 SQLite。晨报发送失败后，后续调度可以再次尝试投递，同时避免因为重发而重复写入当天的历史样本。
 
-![AI 成本与额度群的真实截图，包含 Codex 额度告警、每日额度与余额汇总以及恢复通知](/images/my-feishu-notification-workflow/feishu-ai-quota.jpg)
+![AI 成本与额度群的真实截图，包含 Codex 额度告警、每日额度与余额汇总以及恢复通知](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-ai-quota.jpg)
 
 *额度群中的实际消息顺序：额度偏低提醒、每日晨报、恢复通知，再到次日晨报。图中的百分比和余额为相应采样时点的数据，消息列表显示的 09:55 是当天晨报的到达时间。*
 
@@ -316,7 +316,7 @@ WatchMend 自己也在 Uptime Kuma 的监控清单里。这样巡检进程停止
 
 收到失败通知时，我可以直接打开对应那一次 Actions 运行，不必先去翻最近的工作流列表。收到成功通知时，也能知道它对应哪一次提交。
 
-![Dev 基础设施与发布群的真实部署成功卡片，包含提交信息、分支、提交版本、执行结果和日志入口](/images/my-feishu-notification-workflow/feishu-deployment-result.jpg)
+![Dev 基础设施与发布群的真实部署成功卡片，包含提交信息、分支、提交版本、执行结果和日志入口](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/feishu-deployment-result.jpg)
 
 *Fusion 的一次实际部署通知。卡片保留了分支、提交版本和“查看运行日志”入口；原始卡片采用 UTC 时间，图中的 2026-09-07 12:06 UTC 对应北京时间当天 20:06。*
 
@@ -338,7 +338,7 @@ WatchMend 自己也在 Uptime Kuma 的监控清单里。这样巡检进程停止
 
 前面几条链路体现了不同的处理节奏：内部巡检持续采集，异常达到条件后通知；额度定时检查，风险等级变化时提醒；镜像更新先落盘，固定时间汇总；Codex 任务事件先等待宽限期，再判断候选是否仍然有效。
 
-![采集频率与通知频率的区别：实时告警、定时摘要和可取消的延迟提醒](/images/my-feishu-notification-workflow/notification-decisions.svg)
+![采集频率与通知频率的区别：实时告警、定时摘要和可取消的延迟提醒](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-feishu-notification-workflow/notification-decisions.svg)
 
 我希望采集足够及时，同时让每条消息有明确用途。因此，“程序执行了一次”通常只是一次观察，后面还要经过状态比较和通知规则。
 
