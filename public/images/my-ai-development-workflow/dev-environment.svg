@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1110" viewBox="0 0 1440 1110" role="img" aria-labelledby="title desc">
+  <title id="title">个人开发任务部署到自己的 dev 并完成验证</title>
+  <desc id="desc">本地在独立 worktree 开发并自检，通过审查和 CI、合并后由 GitHub Actions 构建镜像并推送 Harbor。自己的 dev 拉取指定镜像，更新应用，保留兼容的数据库和 Redis。当前应用版本验证结束后再部署下一个任务。</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#628575"/></marker></defs>
+  <style>text{font-family:"PingFang SC","Microsoft YaHei",sans-serif;fill:#293832}.title{font-size:48px;font-weight:700}.sub{font-size:26px;fill:#66736a}.name{font-size:31px;font-weight:650}.body{font-size:26px}.small{font-size:24px;fill:#58665e}.line{fill:none;stroke:#628575;stroke-width:4;marker-end:url(#arrow)}</style>
+  <rect width="1440" height="1110" rx="30" fill="#f8f1e3"/>
+  <text x="64" y="86" class="title">在自己的 dev 上，验收确定的版本</text>
+  <text x="64" y="138" class="sub">本地开发与检查 → 镜像构建 → dev 部署与实际使用</text>
+
+  <g transform="translate(64 200)">
+    <rect width="390" height="460" rx="20" fill="#fffdf7" stroke="#dacdb8" stroke-width="2"/>
+    <text x="26" y="54" class="name">我的本地开发环境</text>
+    <text x="26" y="96" class="small">我 + Claude Code / Codex</text>
+    <rect x="22" y="130" width="346" height="105" rx="12" fill="#f0d9c8"/>
+    <text x="195" y="174" text-anchor="middle" class="body">任务对应的 worktree</text>
+    <text x="195" y="212" text-anchor="middle" class="small">代码修改 · 检查 · 相关测试</text>
+    <rect x="22" y="260" width="346" height="105" rx="12" fill="#e5ede3"/>
+    <text x="195" y="304" text-anchor="middle" class="body">只运行当前任务的服务</text>
+    <text x="195" y="342" text-anchor="middle" class="small">切换任务时先停止旧服务</text>
+    <text x="26" y="418" class="small">PR 中保留改动与自检结果</text>
+  </g>
+  <path class="line" d="M462 405H516"/>
+  <g transform="translate(525 200)">
+    <rect width="390" height="460" rx="20" fill="#fffdf7" stroke="#dacdb8" stroke-width="2"/>
+    <text x="26" y="54" class="name">构建与镜像仓库</text>
+    <text x="26" y="96" class="small">GitHub Actions → Harbor</text>
+    <rect x="22" y="130" width="346" height="105" rx="12" fill="#f0d9c8"/>
+    <text x="195" y="174" text-anchor="middle" class="body">检查最终提交，构建镜像</text>
+    <text x="195" y="212" text-anchor="middle" class="small">推送到 Harbor 保存</text>
+    <rect x="22" y="260" width="346" height="105" rx="12" fill="#e5ede3"/>
+    <text x="195" y="304" text-anchor="middle" class="body">记录各镜像 digest</text>
+    <text x="195" y="342" text-anchor="middle" class="small">对应提交、配置与迁移版本</text>
+    <text x="26" y="418" class="small">用同一份制品识别部署版本</text>
+  </g>
+  <path class="line" d="M923 405H977"/>
+  <g transform="translate(986 200)">
+    <rect width="390" height="460" rx="20" fill="#fffdf7" stroke="#dacdb8" stroke-width="2"/>
+    <text x="26" y="54" class="name">我的 dev 服务器</text>
+    <text x="26" y="96" class="small">拉取指定版本，更新容器</text>
+    <rect x="22" y="130" width="346" height="105" rx="12" fill="#f0d9c8"/>
+    <text x="195" y="174" text-anchor="middle" class="body">本次验证的应用版本</text>
+    <text x="195" y="212" text-anchor="middle" class="small">前端 / API / Worker</text>
+    <rect x="22" y="260" width="346" height="105" rx="12" fill="#e5ede3"/>
+    <text x="195" y="304" text-anchor="middle" class="body">数据库 · Redis</text>
+    <text x="195" y="342" text-anchor="middle" class="small">保留基础服务与兼容数据</text>
+    <text x="26" y="418" class="small">AI 执行用例，我确认体验</text>
+  </g>
+
+  <text x="64" y="746" class="name">同一套应用，按任务推进验证</text>
+  <rect x="64" y="789" width="274" height="112" rx="14" fill="#fffdf7" stroke="#dacdb8" stroke-width="2"/>
+  <text x="201" y="835" text-anchor="middle" class="body">部署当前任务</text>
+  <text x="201" y="874" text-anchor="middle" class="small">记录提交与镜像版本</text>
+  <path class="line" d="M346 845H385"/>
+  <rect x="395" y="789" width="293" height="112" rx="14" fill="#e5ede3"/>
+  <text x="541" y="835" text-anchor="middle" class="body">冒烟与功能验证</text>
+  <text x="541" y="874" text-anchor="middle" class="small">验证期间保持版本稳定</text>
+  <path class="line" d="M696 845H735"/>
+  <rect x="745" y="789" width="289" height="112" rx="14" fill="#f0d9c8"/>
+  <text x="889" y="835" text-anchor="middle" class="body">我确认本轮结果</text>
+  <text x="889" y="874" text-anchor="middle" class="small">留在 Issue，飞书通知</text>
+  <path class="line" d="M1042 845H1081"/>
+  <rect x="1091" y="789" width="285" height="112" rx="14" fill="#fffdf7" stroke="#dacdb8" stroke-width="2"/>
+  <text x="1233" y="835" text-anchor="middle" class="body">继续下一个改动</text>
+  <text x="1233" y="874" text-anchor="middle" class="small">或修复本轮发现的问题</text>
+
+  <rect x="64" y="958" width="1312" height="100" rx="18" fill="#e5ede3"/>
+  <text x="90" y="1000" font-size="28" font-weight="650">核对的不只有镜像，还包括配置、数据结构和后台任务。</text>
+  <text x="90" y="1039" class="small">同一台 dev 上的其他项目，按各自的应用配置和服务范围管理。</text>
+</svg>
