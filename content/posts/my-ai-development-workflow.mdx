@@ -21,7 +21,7 @@ summary: 分享我的个人开发流程：用 Claude Code / Codex 梳理需求�
 
 下面按一个需求的推进顺序，分享我怎么组织这套工作流。
 
-![个人开发者与 AI 助手一起完成从需求到 dev 验收的过程](/images/my-ai-development-workflow/cover.png)
+![个人开发者与 AI 助手一起完成从需求到 dev 验收的过程](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-ai-development-workflow/cover.png)
 
 ## 1. 我定目标，AI 按不同角色参与
 
@@ -44,7 +44,7 @@ summary: 分享我的个人开发流程：用 Claude Code / Codex 梳理需求�
 
 我的主流程是：**想法与需求确认 → 用例准备 → worktree 开发 → PR 审查与 CI → 合并后构建镜像 → 部署自己的 dev → AI 验证与我的实际体验 → 记录结论。**
 
-![我与 AI 分工完成需求梳理、独立开发、审查、dev 部署和验收](/images/my-ai-development-workflow/workflow.svg)
+![我与 AI 分工完成需求梳理、独立开发、审查、dev 部署和验收](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-ai-development-workflow/workflow.svg)
 
 ## 2. 从一句想法开始，把需求写进 Issue
 
@@ -225,7 +225,7 @@ dev 上排查问题时，如果临时修改了容器内文件，我会把修复�
 
 即使只有我一个人开发，也可能同时开着不同任务或 AI 会话。如果一个任务正在浏览器里验证，另一个任务又更新了同一套服务，就很难判断测试结果属于哪个版本。因此，我会把部署顺序和验证范围一起安排。
 
-![本地任务经由 Harbor 部署到自己的 dev，保留基础服务并按版本完成验证](/images/my-ai-development-workflow/dev-environment.svg)
+![本地任务经由 Harbor 部署到自己的 dev，保留基础服务并按版本完成验证](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/my-ai-development-workflow/dev-environment.svg)
 
 这里讨论的是同一套应用的版本切换。同一台 dev 上的其他项目，按各自的应用配置和服务范围管理。
 
