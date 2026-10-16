@@ -29,7 +29,7 @@ sean 的目标很直接：**能不能压到一两轮？**
 
 两天后，答案是：**不能，至少不能在不牺牲难题质量的前提下。** 这期间试了五条路，烧掉 33.66 美元（平时一周大约 11.7 美元），用 Gemini 当裁判把预付额度跑光了，线上的 Gemini 模型跟着一起不可用，还顺带暴露出两个线上 bug。
 
-![砍不掉的 Agent 轮数](/images/agent-loop-rounds-postmortem/cover.jpeg)
+![砍不掉的 Agent 轮数](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/cover.jpeg)
 
 ## 0. 先给地图：试了什么，结果如何
 
@@ -41,7 +41,7 @@ sean 的目标很直接：**能不能压到一两轮？**
 | 关掉推理 | 每轮不想那么久 | DeepSeek 快一个数量级但难题掉分；qwen 轮数翻倍 |
 | subAgent 子代理 | 主模型规划，子代理关推理去查 | 质量回来了，速度只降 25–35%，工具调用暴涨 |
 
-![试了五条路](/images/agent-loop-rounds-postmortem/attempts-map.jpeg)
+![试了五条路](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/attempts-map.jpeg)
 
 最后留下的结论只有一句：**轮数多不是 bug，每一轮基本都在补新事实；慢在每轮的推理，而推理多长、什么时候停，是模型自己的行为。**
 
@@ -135,7 +135,7 @@ sean 的目标很直接：**能不能压到一两轮？**
 - 工具执行每轮约 3 秒，首字延迟 1–3 秒，提示词基本命中缓存。
 - 如果强行只给 2 个工具轮，约 2/3 的运行会缺关键事实。轮数主要用于**按顺序补新信息**。
 
-![一轮 15 秒都花在哪](/images/agent-loop-rounds-postmortem/round-time-breakdown.jpeg)
+![一轮 15 秒都花在哪](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/round-time-breakdown.jpeg)
 
 **结论：慢在每轮的推理，不在工具，也不在轮数本身。** 用户等不下去，不是因为轮数多，是因为每一轮都在长篇大论地想。
 
@@ -198,7 +198,7 @@ sean 对子代理的定位很明确：子代理不该开推理，它存在的意
 
 **等于把轮数从主模型挪到了子代理那里。**
 
-![轮数只是换了个地方](/images/agent-loop-rounds-postmortem/subagent-shift.jpeg)
+![轮数只是换了个地方](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/subagent-shift.jpeg)
 
 sean 接着问：子代理换成 qwen3.8-flash 呢？结果更差：每个任务 9.5 轮，每波中位 76 秒，总耗时 214s / 279s，已经不比基线快。以 mimo 为主模型的 8 次全部失败，因为子代理交回的是空内容或中间过程。
 
@@ -214,7 +214,7 @@ sean 接着问：子代理换成 qwen3.8-flash 呢？结果更差：每个任务
 | 关推理后轮数 | **减少**到 4.0 | 增加到 10.7 | **增加**到 17.4 |
 | 当子代理 | 每任务 8.1 轮，能交回结果 | — | 每任务 9.5 轮，经常交回空结果 |
 
-![同一个开关，三种反应](/images/agent-loop-rounds-postmortem/model-divergence.jpeg)
+![同一个开关，三种反应](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/model-divergence.jpeg)
 
 - **什么时候停，几乎完全取决于模型自己。** 每轮想多久，也取决于模型。
 - **同一个做法，换个模型结论可能相反。** 关推理对 DeepSeek 是数量级的提速，对 qwen 是轮数翻倍。
@@ -248,7 +248,7 @@ sean 接着问：子代理换成 qwen3.8-flash 呢？结果更差：每个任务
 3. **生图没有自动切到别的模型。** 生图服务的兜底只认 429 和 5xx，402（余额用完）被当成普通错误直接失败。这是个潜伏的 bug，修复后余额用完会自动切到 Seedream，实测 56 秒出图。
 4. **对话里报错很难看。** 选 Gemini 聊天时，同一个错误重复弹了好几遍，说的还是笼统的"生成服务暂时不可用"。原因是代理层把服务商的 402 包成了 400，原始状态码只留在异常链深处。修复后沿异常链找回原始状态码，只弹一次提示，回答处直接写"当前模型的服务商额度已用完，请换用其他模型"。
 
-![一次额度事故的连锁反应](/images/agent-loop-rounds-postmortem/quota-incident-chain.jpeg)
+![一次额度事故的连锁反应](https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/posts/agent-loop-rounds-postmortem/quota-incident-chain.jpeg)
 
 一个实验的额度事故，连带测出了两个线上 bug。从结果看算是"意外收获"，但它们本该在更便宜的场景里被发现。
 
