@@ -41,6 +41,7 @@ export function PostCard({ post }: { post: PostMeta }) {
               alt=""
               fill
               sizes="(max-width: 640px) calc(100vw - 48px), 210px"
+              unoptimized={post.cover.endsWith(".svg")}
               className="post-card-cover-image"
             />
           </div>

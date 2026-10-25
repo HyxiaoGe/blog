@@ -14,13 +14,18 @@ export interface PostMeta {
   summary: string;
   readingTime: string;
   aiGenerated?: boolean;
+  featured?: boolean;
   cover?: string;
 }
 
-function getPostCover(slug: string): string | undefined {
-  const filename = "thumbnail.jpeg";
-  const absolutePath = path.join(process.cwd(), "public", "images", slug, filename);
-  return fs.existsSync(absolutePath) ? `/images/${slug}/${filename}` : undefined;
+// 封面约定为正文第一张图片（OSS 地址或 public 下的本地路径）。
+function getPostCover(content: string): string | undefined {
+  const match = content.match(/!\[[^\]]*\]\(\s*([^)\s]+)/);
+  const src = match?.[1];
+  if (!src) return undefined;
+  return src.startsWith("/") || src.startsWith("https://hyxiao-blog-images.oss-cn-shenzhen.aliyuncs.com/")
+    ? src
+    : undefined;
 }
 
 export function getAllPosts(): PostMeta[] {
@@ -45,7 +50,8 @@ export function getAllPosts(): PostMeta[] {
         summary: data.summary || "",
         readingTime: stats.text,
         aiGenerated: data.aiGenerated || false,
-        cover: getPostCover(slug),
+        featured: data.featured || false,
+        cover: getPostCover(content),
       };
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -92,7 +98,8 @@ export function getPostBySlug(slug: string): { meta: PostMeta; content: string }
       summary: data.summary || "",
       readingTime: stats.text,
       aiGenerated: data.aiGenerated || false,
-      cover: getPostCover(slug),
+      featured: data.featured || false,
+      cover: getPostCover(content),
     },
     content,
   };

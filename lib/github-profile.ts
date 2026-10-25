@@ -1,7 +1,7 @@
 const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
 const GITHUB_LOGIN = "HyxiaoGe";
 const PINNED_LIMIT = 6;
-const RECENTLY_STARRED_LIMIT = 12;
+const RECENTLY_STARRED_LIMIT = 6;
 const STARRED_QUERY_LIMIT = 50;
 
 export interface GitHubLanguage {
