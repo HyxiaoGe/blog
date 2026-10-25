@@ -1,6 +1,5 @@
 import {
   getGitHubProfileData,
-  type GitHubLanguage,
   type GitHubProfileData,
   type GitHubProfileRepository,
 } from "@/lib/github-profile";
@@ -52,97 +51,45 @@ const statusLabels = {
   unknown: "Unknown",
 } as const;
 
-function getMonitorTopic(topics: string[]): string | null {
-  return topics.find((topic) => topic.startsWith("monitor-")) ?? null;
-}
-
 const hiddenTopicPrefixes = ["monitor-", "product-", "component-"];
+const MAX_TOPICS = 6;
 
-function isDisplayTopic(topic: string): boolean {
-  return (
-    topic !== "product-primary" &&
-    !hiddenTopicPrefixes.some((prefix) => topic.startsWith(prefix))
-  );
+function getDisplayTopics(topics: string[]): string[] {
+  return topics
+    .filter((topic) => !hiddenTopicPrefixes.some((prefix) => topic.startsWith(prefix)))
+    .slice(0, MAX_TOPICS);
 }
 
-function getProductTopic(repository: GitHubProfileRepository): string | null {
-  return (
-    repository.topics.find(
-      (topic) => topic.startsWith("product-") && topic !== "product-primary",
-    ) ?? null
-  );
-}
-
-function formatProductName(value: string): string {
-  return value
-    .replace(/^product-/, "")
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function getComponentLabel(repository: GitHubProfileRepository): string {
-  const topic = repository.topics.find((item) => item.startsWith("component-"));
-  if (!topic) return "Repository";
-
-  return topic
-    .replace(/^component-/, "")
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-interface ProductGroup {
-  key: string;
+interface ProjectProfile {
   name: string;
-  primary: GitHubProfileRepository;
-  repositories: GitHubProfileRepository[];
-  languages: GitHubLanguage[];
-  topics: string[];
-  monitorTopic: string | null;
-  stars: number;
+  monitorKey?: string;
+  highlight?: string;
 }
 
-function groupPinnedRepositories(
-  repositories: GitHubProfileRepository[],
-): ProductGroup[] {
-  const groups = new Map<string, GitHubProfileRepository[]>();
+// 置顶仓库的展示名、状态监控与一句话亮点；未列出的仓库按仓库名展示、不显示状态。
+const projectProfiles: Record<string, ProjectProfile> = {
+  fusion: {
+    name: "Fusion",
+    monitorKey: "monitor-fusion",
+    highlight: "长回答流式处理提速约 80 倍；并发压测 18 个 Agent 运行，执行轨迹全部完整记录。",
+  },
+  "agent-tools": {
+    name: "Agent Tools",
+    highlight: "网页读取先免费直连、1.5 秒后并行请求付费服务，单次读取上限 10 秒。",
+  },
+  watchmend: {
+    name: "WatchMend",
+    highlight: "确定性规则负责发现问题，LLM 只做只读诊断与降噪。",
+  },
+  "auth-service": {
+    name: "Auth Service",
+    monitorKey: "monitor-auth",
+    highlight: "一套服务支撑多个独立应用的登录与跨应用单点登录。",
+  },
+};
 
-  for (const repository of repositories) {
-    const productTopic = getProductTopic(repository);
-    const key = productTopic ?? `repository-${repository.nameWithOwner}`;
-    groups.set(key, [...(groups.get(key) ?? []), repository]);
-  }
-
-  return Array.from(groups, ([key, members]) => {
-    const primary =
-      members.find((repository) => repository.topics.includes("product-primary")) ??
-      members.find((repository) => repository.homepageUrl) ??
-      members[0];
-    const productTopic = key.startsWith("product-") ? key : null;
-
-    return {
-      key,
-      name: productTopic ? formatProductName(productTopic) : primary.name,
-      primary,
-      repositories: members,
-      languages: Array.from(
-        new Map(
-          members
-            .map((repository) => repository.primaryLanguage)
-            .filter((language): language is GitHubLanguage => language !== null)
-            .map((language) => [language.name, language]),
-        ).values(),
-      ),
-      topics: Array.from(
-        new Set(members.flatMap((repository) => repository.topics.filter(isDisplayTopic))),
-      ),
-      monitorTopic:
-        members.map((repository) => getMonitorTopic(repository.topics)).find(Boolean) ??
-        null,
-      stars: members.reduce((total, repository) => total + repository.stargazerCount, 0),
-    };
-  });
+function getProjectProfile(repository: GitHubProfileRepository): ProjectProfile {
+  return projectProfiles[repository.name.toLowerCase()] ?? { name: repository.name };
 }
 
 function formatUptime(uptime: number | null): string | null {
@@ -151,15 +98,15 @@ function formatUptime(uptime: number | null): string | null {
 }
 
 function ProjectStatus({
-  monitorTopic,
+  monitorKey,
   statuses,
 }: {
-  monitorTopic: string | null;
+  monitorKey: string | undefined;
   statuses: ServiceStatusMap | null;
 }) {
-  if (!monitorTopic) return null;
+  if (!monitorKey) return null;
 
-  const status: ServiceStatus | undefined = statuses?.[monitorTopic];
+  const status: ServiceStatus | undefined = statuses?.[monitorKey];
 
   if (!status) {
     return (
@@ -206,13 +153,13 @@ export default async function VibeCodingPage() {
     loadProfileData(),
     loadServiceStatuses(),
   ]);
-  const products = data ? groupPinnedRepositories(data.pinned) : [];
+  const projects = data?.pinned ?? [];
 
   return (
     <div className="site-container-wide vibe-repos-page">
       <header className="vibe-repos-header">
         <h1>Projects &amp; inspirations.</h1>
-        <p>我正在构建的项目，以及最近关注的开源作品。</p>
+        <p>我独立设计、开发并长期运维的线上项目，以及最近关注的开源作品。</p>
       </header>
 
       {!data ? (
@@ -224,85 +171,82 @@ export default async function VibeCodingPage() {
         <>
           <section className="vibe-repos-section" aria-labelledby="pinned-title">
             <div className="vibe-repos-section-heading">
-              <h2 id="pinned-title">Products</h2>
-              <span>{products.length}</span>
+              <h2 id="pinned-title">Projects</h2>
+              <span>{projects.length}</span>
             </div>
 
             <div className="vibe-pinned-grid">
-              {products.map((product, index) => (
-                <article
-                  className="vibe-pinned-card"
-                  key={product.key}
-                  style={{
-                    "--repo-color":
-                      product.primary.primaryLanguage?.color ||
-                      "var(--color-accent)",
-                    "--card-index": index,
-                  } as CSSProperties}
-                >
-                  <div className="vibe-pinned-card-heading">
-                    <h3>{product.name}</h3>
-                    <ProjectStatus
-                      monitorTopic={product.monitorTopic}
-                      statuses={statuses}
-                    />
-                  </div>
+              {projects.map((repository, index) => {
+                const profile = getProjectProfile(repository);
+                const topics = getDisplayTopics(repository.topics);
 
-                  <p className="vibe-repo-description">
-                    {product.primary.description || "这个产品还没有添加简介。"}
-                  </p>
-
-                  {(product.languages.length > 0 || product.topics.length > 0) && (
-                    <div className="vibe-repo-topics" aria-label="产品 Topics">
-                      {product.languages.map((language) => (
-                        <span className="vibe-repo-topic-language" key={language.name}>
-                          <i
-                            aria-hidden="true"
-                            style={{
-                              backgroundColor:
-                                language.color || "var(--color-accent)",
-                            }}
-                          />
-                          {language.name}
-                        </span>
-                      ))}
-                      {product.topics.map((topic) => (
-                        <span key={topic}>{topic}</span>
-                      ))}
+                return (
+                  <article
+                    className="vibe-pinned-card"
+                    key={repository.nameWithOwner}
+                    style={{
+                      "--repo-color":
+                        repository.primaryLanguage?.color || "var(--color-accent)",
+                      "--card-index": index,
+                    } as CSSProperties}
+                  >
+                    <div className="vibe-pinned-card-heading">
+                      <h3>{profile.name}</h3>
+                      <ProjectStatus monitorKey={profile.monitorKey} statuses={statuses} />
                     </div>
-                  )}
 
-                  <div className="vibe-product-repositories">
-                    <span className="vibe-product-repositories-label">Repositories</span>
-                    {product.repositories.map((repository) => (
-                      <a
-                        href={repository.url}
-                        key={repository.nameWithOwner}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <span>{repository.name}</span>
-                        <small>{getComponentLabel(repository)}</small>
-                        <i aria-hidden="true">↗</i>
-                      </a>
-                    ))}
-                  </div>
+                    <p className="vibe-repo-description">
+                      {repository.description || "这个项目还没有添加简介。"}
+                    </p>
 
-                  <div className="vibe-repo-meta">
-                    <span>★ {formatCount(product.stars)}</span>
-                    {product.primary.homepageUrl && (
-                      <a
-                        className="vibe-product-link"
-                        href={product.primary.homepageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        View product ↗
-                      </a>
+                    {profile.highlight && (
+                      <p className="vibe-repo-highlight">{profile.highlight}</p>
                     )}
-                  </div>
-                </article>
-              ))}
+
+                    {(repository.primaryLanguage || topics.length > 0) && (
+                      <div className="vibe-repo-topics" aria-label="项目 Topics">
+                        {repository.primaryLanguage && (
+                          <span className="vibe-repo-topic-language">
+                            <i
+                              aria-hidden="true"
+                              style={{
+                                backgroundColor:
+                                  repository.primaryLanguage.color || "var(--color-accent)",
+                              }}
+                            />
+                            {repository.primaryLanguage.name}
+                          </span>
+                        )}
+                        {topics.map((topic) => (
+                          <span key={topic}>{topic}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="vibe-repo-meta">
+                      <span>★ {formatCount(repository.stargazerCount)}</span>
+                      <a
+                        className="vibe-repo-link"
+                        href={repository.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        GitHub ↗
+                      </a>
+                      {repository.homepageUrl && (
+                        <a
+                          className="vibe-product-link"
+                          href={repository.homepageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View product ↗
+                        </a>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
 

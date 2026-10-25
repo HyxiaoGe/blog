@@ -10,6 +10,7 @@ tags:
   - 根因分析
 categories: DevOps
 aiGenerated: true
+featured: true
 summary: 一句模糊的"访问变慢了"，怀疑方向是"最近那次访问速度优化改坏了"。顺着排查剥开五层根因——代理 GUI 的内存泄漏、fake-ip 把"自己访问自己"绕到香港再绕回来、OIDC 每请求阻塞拉 userinfo、CI 拉镜像被代理抖动撞穿超时，最后还有我亲手把刚修好的又弄坏的翻车彩蛋。这篇用人（sean）和 AI（Claude Code）的双视角，复盘每一层是怎么被证据逼出来的，以及一份 11 条的 gotcha 速查。
 ---
 

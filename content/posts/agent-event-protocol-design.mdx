@@ -9,6 +9,7 @@ tags:
   - 状态机
 categories: 架构设计
 aiGenerated: true
+featured: true
 summary: 前端 Agent UI 表现力差时，第一反应往往是去优化组件，但根源常常在后端：while-loop + finish_reason 字符串分支驱动的 agent 模式，不写出稳定事件协议，前端无论怎么改都只是补丁。本文记录把 Fusion 的 Agent 模式从隐式循环切换到显式 agent_event 协议的全过程，含控制面/数据面分离、事件流即事实源、emitter 并发安全等关键设计取舍。
 ---
 
