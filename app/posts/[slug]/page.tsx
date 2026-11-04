@@ -100,6 +100,7 @@ export default async function PostPage({ params }: Props) {
             {post.meta.tags.map((tag) => (
               <Link
                 key={tag}
+                prefetch={false}
                 href={`/tags/${encodeURIComponent(tag)}`}
                 style={{ fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 6, backgroundColor: "var(--color-bg-secondary)", color: "var(--color-text-tertiary)", textDecoration: "none" }}
               >
