@@ -22,6 +22,7 @@ export default function TagsPage() {
         {tags.map((tag) => (
           <Link
             key={tag.name}
+            prefetch={false}
             href={`/tags/${encodeURIComponent(tag.name)}`}
             style={{
               fontSize: 14,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import { PostCover } from "@/components/PostCover";
 import type { PostMeta } from "@/lib/posts";
 
 const gradients = [
@@ -36,14 +36,7 @@ export function PostCard({ post }: { post: PostMeta }) {
       <div className={post.cover ? "post-card-layout" : undefined}>
         {post.cover && (
           <div className="post-card-cover" aria-hidden="true">
-            <Image
-              src={post.cover}
-              alt=""
-              fill
-              sizes="(max-width: 640px) calc(100vw - 48px), 210px"
-              unoptimized={post.cover.endsWith(".svg")}
-              className="post-card-cover-image"
-            />
+            <PostCover src={post.cover} />
           </div>
         )}
 
@@ -80,6 +73,7 @@ export function PostCard({ post }: { post: PostMeta }) {
               {post.tags.map((tag) => (
                 <Link
                   key={tag}
+                  prefetch={false}
                   href={`/tags/${encodeURIComponent(tag)}`}
                   className="post-card-tag-link text-[11px] font-medium px-2 py-0.5 rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors"
                   style={{ textDecoration: "none" }}

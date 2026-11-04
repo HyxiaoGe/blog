@@ -79,6 +79,7 @@ export default function HomePage() {
             {sidebarTags.map((tag) => (
               <Link
                 key={tag.name}
+                prefetch={false}
                 href={`/tags/${encodeURIComponent(tag.name)}`}
                 className="home-tag-link"
               >

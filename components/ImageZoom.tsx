@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { articleImageSources } from "@/lib/image-delivery";
 
 export function ImageZoom(props: React.ComponentProps<"img">) {
   const [open, setOpen] = useState(false);
@@ -37,7 +38,13 @@ export function ImageZoom(props: React.ComponentProps<"img">) {
         onClick={() => setOpen(true)}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img {...props} alt={props.alt || ""} />
+        <img
+          {...props}
+          {...(!props.srcSet && typeof props.src === "string" ? articleImageSources(props.src) : {})}
+          alt={props.alt || ""}
+          loading={props.loading ?? "lazy"}
+          decoding={props.decoding ?? "async"}
+        />
       </button>
       {open && createPortal(
         <div
